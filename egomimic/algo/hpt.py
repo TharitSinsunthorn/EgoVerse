@@ -67,7 +67,7 @@ class HPTModel(nn.Module):
         self.shared_modality_trunk = shared_modality_trunk
         self.no_trunk = no_trunk
 
-        
+        self.encoders = nn.ModuleDict()
 
         self.trunk = self._create_policy_trunk(
             embed_dim=embed_dim,
@@ -97,11 +97,11 @@ class HPTModel(nn.Module):
 
         self.auxiliary_key = None
 
-    def init_encoders(self, modality, encoder):
+    def init_encoder(self, modality, encoder_spec):
         """
         """
+        encoder = hydra.utils.instantiate(encoder_spec)
         self.encoders[modality] = encoder
-        self.encoders = nn.ModuleDict(self.encoders)
 
     def init_domain_stem(self, domain_name, stem_spec):
         """
@@ -373,10 +373,97 @@ class HPT(Algo):
     def __init__(
         self,
         data_schematic,
+        camera_transforms,
+        # ---------------------------
+        # Trunk params
+        # ---------------------------
+        trunk: dict,
+        # ---------------------------
+        # Other model params
+        # ---------------------------
+        stem_specs: dict = None,
+        head_specs: dict = None,
+        shared_stem_specs: dict = None,
+        shared_obs_keys: list = None,
+        encoder_specs: dict = None,
+        domains: list = None,
+        auxiliary_domains: list = None,
+        auxiliary_key: str = None,
+        # ---------------------------
+        # Pretrained
+        # ---------------------------
+        pretrained: bool = False,
+        pretrained_checkpoint: str = "",
+        # ---------------------------
+        # Optional image augmentations
+        # ---------------------------
+        train_image_augs=None,
+        eval_image_augs=None,
+        # ---------------------------
+        # Catch-all kwargs
+        # ---------------------------
+        **kwargs
+    ):
+        self.nets = nn.ModuleDict()
+        self.data_schematic = data_schematic
+
+        self.camera_transforms = camera_transforms
+        self.stem_specs = stem_specs
+        self.head_specs = head_specs
+        self.encoders = encoder_specs
+
+        self.shared_stem_specs = shared_stem_specs
+        self.shared_obs_keys = shared_obs_keys
+
+        self.pretrained = pretrained
+        self.pretrained_checkpoint = pretrained_checkpoint
         
-    )   
+        self.domains = domains.copy()
+        self.auxiliary_domains = auxiliary_domains.copy()
+        self.auxiliary_key = self.auxiliary_key
 
+        model = HPTModel(**trunk)
+        model.auxiliary_key = self.auxiliary_key
 
+        self.camera_keys = data_schematic.keys_of_type("camera_keys")
+        self.proprio_keys = data_schematic.keys_of_type("proprio_keys")
+        self.lang_keys = data_schematic.keys_of_type("lang_keys")
 
+        self.proprio_keys = [key for key in self.proprio_keys if key not in self.lang_keys]
+        self.obs_keys = self.proprio_keys + self.camera_keys + self.lang_keys
 
+        self.multitask = kwargs.get(multitask, False)
+        self.device = kwargs.get(device, torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+        if self.pretrained:
+            model.load_pretrained(self.pretrained_checkpoint)
+
+        for domain in self.domains:
+            model.init_domain_stem(domain, self.stem_specs[domain])
+            model.init_domain_head(domain, self.head_specs[domain])
         
+        if self.shared_obs_keys is not None:
+            model.init_domain_stem("shared", self.shared_stem_specs)
+            model.shared_keys = self.shared_obs_keys
+
+        for domain in self.auxiliary_domains:
+            model.init_domain_head(domain, self.head_specs[domain])
+        
+        for modality, encoder_cfg in self.encoders.items():
+            model.init_encoder(modality, encoder_cfg)
+        
+        model.finalize_modules()
+
+        self.ac_key_robot = data_schematic.keys_of_type("action_keys_robot")
+        self.ac_key_hand = data_schematic.keys_of_type("action_keys_hand")
+
+        self.nets["policy"] = model
+        self.nets = self.nets.float().to(self.device)
+
+    @override
+    def process_batch_for_training(self, batch):
+        batch = self.data_schematic.normalize_data(batch, self.embodiment_id)
+        
+
+
+    

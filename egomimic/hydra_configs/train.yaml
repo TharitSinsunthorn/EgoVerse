@@ -5,6 +5,7 @@ defaults:
   - debug: null
   - logger: wandb
   - override hydra/launcher: submitit
+  - data: dual_data
   - _self_
 
 name: test
@@ -23,19 +24,6 @@ hydra:
 launch_params:
   gpus_per_node: 1
   nodes: 1
-
-data:
-  _target_: egomimic.pl_utils.pl_data_utils.RLDBModule
-  dataset:
-    _target_: rldb.utils.RLDBDataset
-    # parquet_path: /coc/flash9/skareer6/Projects/RLDB/rldb/export/oboo_robot
-    repo_id: "rpuns/eve_laundry_rl2"
-    root: "/coc/cedarp-dxu345-0/datasets/RLDB/robomimic_eve_laundry_debug/lerobot_debug"
-    local_files_only: true
-
-  dataloader_kwargs:
-    batch_size: 32
-    num_workers: 10
 
 data_schematic: # Dynamically fill in these shapes from the dataset
   _target_: rldb.utils.DataSchematic

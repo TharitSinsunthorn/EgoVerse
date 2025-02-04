@@ -7,7 +7,7 @@ import robomimic.utils.tensor_utils as TensorUtils
 import torch
 from lightning import LightningModule
 from egomimic.utils.egomimicUtils import nds
-from egomimic.pl_utils.pl_data_utils import DualDataModuleWrapper 
+from egomimic.pl_utils.pl_data_utils import DualDataModuleWrapper, RLDBModule
 from typing import Any, Dict
 import torchvision.io as tvio
 from lightning.pytorch.utilities import rank_zero_only

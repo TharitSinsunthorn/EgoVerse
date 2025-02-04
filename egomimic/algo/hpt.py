@@ -39,12 +39,11 @@ import einops
 from collections import defaultdict
 
 #TODO: write comments
-
 class HPTModel(nn.Module):
     """
-    Heterogenous Pretrained Transformer implementation from the HPT paper but with some additional modifications
-
-
+    Heterogenous Pretrained Transformer (HPT) implementation based on the HPT paper, with additional modifications.
+    This model integrates modality-specific stems, a transformer trunk, and domain-specific heads to process
+    multi-modal data.
     """
 
     def __init__(
@@ -62,6 +61,37 @@ class HPTModel(nn.Module):
         weight_init_style="pytorch",
         **kwargs,
     ):
+        """
+        Initialize the HPTModel.
+
+        Parameters
+        ----------
+        embed_dim : int, optional
+            Dimension of the token embeddings (default is 1024).
+        num_blocks : int, optional
+            Number of transformer blocks (default is 24).
+        num_heads : int, optional
+            Number of attention heads in each transformer block (default is 16).
+        token_postprocessing : str, optional
+            Strategy for postprocessing tokens. Options include "action_token", "mean", "max", "last", and "no-op"
+            (default is "action_token").
+        observation_horizon : int, optional
+            Number of past observations to consider (default is 4).
+        action_horizon : int, optional
+            Number of action tokens to predict (default is 1).
+        no_trunk : bool, optional
+            If True, the transformer trunk is skipped (default is False).
+        shared_modality_trunk : optional
+            Shared trunk module for modality-specific processing if provided.
+        use_domain_embedding : bool, optional
+            Whether to use domain-specific embeddings (default is False).
+        drop_path : float, optional
+            Drop path rate for regularization (default is 0.0).
+        weight_init_style : str, optional
+            Weight initialization style (default is "pytorch").
+        **kwargs : dict
+            Additional keyword arguments.
+        """
         super().__init__()
         self.embed_dim = embed_dim
         self.shared_modality_trunk = shared_modality_trunk
@@ -82,7 +112,7 @@ class HPTModel(nn.Module):
         # self.normalizer = {}
         self.encoders = {}
         self.domains = []
-        self.use_modality_embedding = use_modality_embedding
+        self.use_modality_embedding = use_domain_embedding
         self.observation_horizon = observation_horizon
         self.action_horizon = action_horizon
         self.token_postprocessing = token_postprocessing
@@ -99,12 +129,28 @@ class HPTModel(nn.Module):
 
     def init_encoder(self, modality, encoder_spec):
         """
+        Initialize an encoder for the specified modality.
+
+        Parameters
+        ----------
+        modality : str
+            The name of the modality.
+        encoder_spec : dict or object
+            The specification or configuration for the encoder. This is used with hydra.utils.instantiate.
         """
         encoder = hydra.utils.instantiate(encoder_spec)
         self.encoders[modality] = encoder
 
     def init_domain_stem(self, domain_name, stem_spec):
         """
+        Initialize the stem (feature extractor) for a given domain along with its modalities.
+
+        Parameters
+        ----------
+        domain_name : str
+            The name of the domain.
+        stem_spec : dict-like
+            A specification containing configurations for each modality's stem.
         """
         self.stem_spec[domain_name] = stem_spec
         self.modalities[domain_name] = stem_spec.keys()
@@ -113,37 +159,68 @@ class HPTModel(nn.Module):
             stem_name = f"{domain_name}_{modality}"
             self.stems[stem_name] = hydra.utils.instantiate(getattr(stem_spec, modality))
             if hasattr(self.stems[stem_name], 'init_cross_attn'):
-                self.stems[stem_name].init_cross_attn(stem_spec[modality].specs.cross_attn_specs, modality)
+                self.stems[stem_name].init_cross_attn(stem_spec[modality].specs.cross_attn_specs)
 
             self.modalities_tokens[modality] = nn.Parameter(
                 torch.randn(1, 1, stem_spec[modality].specs.cross_attn_specs.modality_embed_dim) * STD_SCALE
             )
-        
+
     def init_domain_head(self, domain_name, head_spec):
         """
+        Initialize the head (prediction module) for a given domain.
+
+        Parameters
+        ----------
+        domain_name : str
+            The name of the domain.
+        head_spec : dict or object
+            The specification or configuration for the head, used with hydra.utils.instantiate.
         """
         self.head_spec[domain_name] = head_spec
         self.domains.append(domain_name)
         self.heads[domain_name] = hydra.utils.instantiate(head_spec)
-    
+
     def finalize_modules(self):
+        """
+        Finalize the module initialization by converting stems, heads, and modality tokens into
+        nn.ModuleDict/nn.ParameterDict objects, applying weight initialization, and creating shared
+        action tokens if required.
+        """
         self.stems = nn.ModuleDict(self.stems)
         self.heads = nn.ModuleDict(self.heads)
         self.modalities_tokens = nn.ParameterDict(self.modalities_tokens)
         self.apply(self._init_weights)
 
-        ## Shared action tokens
+        # Shared action tokens
         if self.token_postprocessing == "action_token":
             self.action_tokens = nn.Parameter(
                 torch.randn(1, self.action_horizon, self.embed_dim) * STD_SCALE
             )
-    
+
     def _create_policy_trunk(self, embed_dim, num_blocks, num_heads, drop_path, weight_init_style):
         """
-        #TODO: Make this hydra instantiate
+        Create the transformer trunk module for policy processing.
+
+        Parameters
+        ----------
+        embed_dim : int
+            Dimension of token embeddings.
+        num_blocks : int
+            Number of transformer blocks.
+        num_heads : int
+            Number of attention heads in each block.
+        drop_path : float
+            Drop path rate for regularization.
+        weight_init_style : str
+            Weight initialization style.
+
+        Returns
+        -------
+        nn.ModuleDict
+            A module dictionary containing the main trunk transformer and, if provided, shared modality trunks.
         """
         trunk = {}
-        
+
         trunk["trunk"] = SimpleTransformer(
             embed_dim=embed_dim,
             num_blocks=num_blocks,
@@ -171,25 +248,62 @@ class HPTModel(nn.Module):
 
     def get_position_embedding(self, feature, embed_dim):
         """
+        Generate sinusoidal positional embeddings for a given feature tensor.
+
+        Parameters
+        ----------
+        feature : torch.Tensor
+            The input tensor for which positional embeddings are computed.
+        embed_dim : int
+            The embedding dimension.
+
+        Returns
+        -------
+        torch.Tensor
+            The positional embedding tensor with the same device as the input.
         """
         tokensize = int(feature.shape[1])
         tokens = get_sinusoid_encoding_table(0, tokensize, self.embed_dim)
         return tokens.repeat((1, 1, 1)).to(feature.device)
-    
+
     def preprocess_tokens(self, domain, features):
         """
+        Preprocess and combine stem tokens with optional action tokens and add positional embeddings.
+
+        Parameters
+        ----------
+        domain : str
+            The domain for which tokens are being processed.
+        features : list of torch.Tensor
+            List of feature tokens from different modalities.
+
+        Returns
+        -------
+        torch.Tensor
+            The combined token tensor after adding positional embeddings.
         """
         tokens = torch.cat(features, dim=-2)
-        
+
         if self.token_postprocessing == "action_token":
             action_tokens = self.action_tokens.repeat(len(tokens), 1, 1)
             tokens = torch.cat([tokens, action_tokens], dim=-2)
 
         position_tokens = self.get_position_embedding(tokens, self.embed_dim)
         return tokens + position_tokens
-    
+
     def postprocess_tokens(self, trunk_tokens):
         """
+        Postprocess the tokens output from the transformer trunk based on the token_postprocessing strategy.
+
+        Parameters
+        ----------
+        trunk_tokens : torch.Tensor
+            The token tensor output from the transformer trunk.
+
+        Returns
+        -------
+        torch.Tensor
+            The processed token tensor (e.g., averaged, max pooled, or selected action tokens).
         """
         if self.token_postprocessing == "mean":
             return trunk_tokens.mean(dim=1)
@@ -206,6 +320,19 @@ class HPTModel(nn.Module):
 
     def preprocess_states(self, domain, data):
         """
+        Preprocess state information in the input data by adding a new dimension if necessary.
+
+        Parameters
+        ----------
+        domain : str
+            The domain name.
+        data : dict
+            Dictionary containing input data with potential "state" keys.
+
+        Returns
+        -------
+        dict
+            Updated data dictionary with preprocessed state information.
         """
         if "state" in data:
             data["state"] = data["state"][:, :, None]
@@ -214,15 +341,32 @@ class HPTModel(nn.Module):
         return data
 
     def stem_process(self, domain, data):
+        """
+        Process input data through modality-specific stems to compute latent feature tokens.
+
+        Parameters
+        ----------
+        domain : str
+            The domain corresponding to the input data.
+        data : dict
+            Dictionary containing input data for various modalities.
+
+        Returns
+        -------
+        tuple
+            A tuple containing:
+                - A list of tokens from each modality.
+                - A dictionary mapping each modality to its computed token.
+        """
         feats = []
         feat_dict = {}
         for modality in (list(self.modalities[domain]) + self.shared_keys):
             if modality not in data:
                 continue
-            
+
             if modality in self.shared_keys:
                 domain = "shared"
-            
+
             stem = self.stems[f"{domain}_{modality}"]
             if modality in self.encoders:
                 data[modality] = self.encoders[modality](data[modality])
@@ -234,7 +378,7 @@ class HPTModel(nn.Module):
             if getattr(self, "train_mode", False) and self.stem_spec[domain][modality].cross_attn_specs.random_horizon_masking and data_horizon > 1:
                 horizon = np.random.randint(1, data_horizon + 1)
                 data[modality] = data[modality][:, data_horizon - horizon:]
-            
+
             positional_embedding = get_sinusoid_encoding_table(
                 0, horizon * int(np.prod(data_shape[2:-1])), data_shape[-1]
             ).to(data[modality])
@@ -253,6 +397,23 @@ class HPTModel(nn.Module):
 
     def get_visual_embeds(self, domain, data, modality):
         """
+        Compute visual embeddings for a given modality from the input data.
+
+        Parameters
+        ----------
+        domain : str
+            The domain corresponding to the input data.
+        data : dict
+            Dictionary containing input data.
+        modality : str
+            The modality for which visual embeddings are to be computed.
+
+        Returns
+        -------
+        list
+            A list containing:
+                - The encoded features from the encoder.
+                - The latent tokens computed by the modality stem.
         """
         if modality in self.shared_keys:
             domain = "shared"
@@ -268,19 +429,32 @@ class HPTModel(nn.Module):
         horizon = data_horizon
 
         positional_embedding = get_sinusoid_encoding_table(
-                0, horizon * int(np.prod(data_shape[2:-1])), data_shape[-1]
-            ).to(encoder_feats)
+            0, horizon * int(np.prod(data_shape[2:-1])), data_shape[-1]
+        ).to(encoder_feats)
         positional_embedding = einops.repeat(
-                positional_embedding, 
-                "b h w -> (repeat b) h w", 
-                repeat=data_shape[0]
-            )
+            positional_embedding, 
+            "b h w -> (repeat b) h w", 
+            repeat=data_shape[0]
+        )
         stem_feats = encoder_feats + positional_embedding.view(encoder_feats.shape)
         stem_token = stem.compute_latent(stem_feats)
         return [encoder_feats, stem_token]
-    
+
     def forward_features(self, domain, data):
         """
+        Compute feature tokens by processing the input data through stems and the transformer trunk.
+
+        Parameters
+        ----------
+        domain : str
+            The domain name for which features are computed.
+        data : dict
+            Dictionary containing input data for various modalities.
+
+        Returns
+        -------
+        torch.Tensor
+            The processed feature tokens after trunk and postprocessing.
         """
         data = self.preprocess_states(domain, data)
         stem_tokens, token_dict = self.stem_process(domain, data)
@@ -292,41 +466,78 @@ class HPTModel(nn.Module):
             trunk_tokens = self.trunk["trunk"](trunk_tokens)
 
         return self.postprocess_tokens(trunk_tokens)
-    
+
     def compute_loss(self, batch):
         """
+        Compute the loss for a given batch of training data.
+
+        Parameters
+        ----------
+        batch : dict
+            Dictionary containing the keys "domain" and "data" for the input batch.
+
+        Returns
+        -------
+        torch.Tensor
+            The computed loss value.
         """
         self.train_mode = True
         domain, data = batch["domain"][0], batch["data"]
-        
+
         features = self.forward_features(domain, data)
 
         if f"state_{self.auxiliary_key}" in data:
-            domain = f"{domain}_{self.auxiliary_key}" 
+            domain = f"{domain}_{self.auxiliary_key}"
 
         return self.heads[domain].compute_loss(features, data)
-    
+
     def forward(self, domain, data):
-        """ 
+        """
+        Forward pass of the HPTModel to compute actions.
+
+        Parameters
+        ----------
+        domain : str
+            The domain corresponding to the input data.
+        data : dict
+            Dictionary containing input data for various modalities.
+
+        Returns
+        -------
+        torch.Tensor
+            The predicted action output.
         """
         features = self.forward_features(domain, data)
-        
+
         if f"state_{self.auxiliary_key}" in data:
             domain = f"{domain}_{self.auxiliary_key}"
 
         action = self.heads[domain](features)
-        return action 
+        return action
 
     def save(self, checkpoint_path="./.checkpoints/hpt/full/"):
         """
+        Save the state of the HPTModel to a specified checkpoint path.
+
+        Parameters
+        ----------
+        checkpoint_path : str, optional
+            The path to save the checkpoint (default is "./.checkpoints/hpt/full/").
         """
         try:
             torch.save(self.state_dict(), checkpoint_path)
         except FileNotFoundError:
             print(f"Could not save module parameters for trunk to {checkpoint_path}.")
-    
+
     def _init_weights(self, m):
         """
+        Initialize weights of a module using Xavier uniform initialization for Linear layers and constant
+        initialization for LayerNorm layers.
+
+        Parameters
+        ----------
+        m : nn.Module
+            The module to initialize.
         """
         if isinstance(m, nn.Linear):
             torch.nn.init.xavier_uniform_(m.weight)
@@ -338,14 +549,26 @@ class HPTModel(nn.Module):
 
     def freeze_trunk(self, num_layers=0):
         """
+        Freeze a specified number of layers in the transformer trunk to prevent them from updating during training.
+
+        Parameters
+        ----------
+        num_layers : int, optional
+            The number of layers to freeze from the end of the trunk (default is 0).
         """
         layers = list(self.trunk["trunk"].children())
         for layer in layers[-num_layers:]:
             for param in layer.parameters():
                 param.requires_grad = False
-    
+
     def unfreeze_trunk(self, num_layers=0):
         """
+        Unfreeze a specified number of layers in the transformer trunk to allow them to update during training.
+
+        Parameters
+        ----------
+        num_layers : int, optional
+            The number of layers to unfreeze from the end of the trunk (default is 0).
         """
         layers = list(self.trunk["trunk"].children())
         for layer in layers[-num_layers:]:
@@ -354,6 +577,12 @@ class HPTModel(nn.Module):
 
     def load_trunk(self, path):
         """
+        Load the transformer trunk state from a given file path or a HuggingFace URL.
+
+        Parameters
+        ----------
+        path : str
+            The file path or HuggingFace identifier (prefixed with "hf://") from which to load the trunk state.
         """
         if "hf://" in path:
             if "output" in path:
@@ -362,6 +591,14 @@ class HPTModel(nn.Module):
         self.trunk.load_state_dict(torch.load(path), strict=True)
 
     def load_pretrained(self, checkpoint_path):
+        """
+        Load pretrained trunk weights from a specified checkpoint directory or HuggingFace URL.
+
+        Parameters
+        ----------
+        checkpoint_path : str
+            The path or HuggingFace identifier (prefixed with "hf://") for the pretrained checkpoint.
+        """
         if not os.path.exists(checkpoint_path):
             checkpoint_path = download_from_huggingface(checkpoint_path[len("hf://") :])
         
@@ -395,10 +632,10 @@ class HPT(Algo):
         pretrained: bool = False,
         pretrained_checkpoint: str = "",
         # ---------------------------
-        # Optional image augmentations
+        # Image augmentations
         # ---------------------------
-        train_image_augs=None,
-        eval_image_augs=None,
+        train_image_augs,
+        eval_image_augs,
         # ---------------------------
         # Catch-all kwargs
         # ---------------------------

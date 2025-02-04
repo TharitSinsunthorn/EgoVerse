@@ -7,21 +7,18 @@ from rldb.utils import RLDBDataset
 from termcolor import cprint
 
 class RLDBModule(LightningDataModule):
-    def __init__(self, dataset, dataloader_kwargs):
+    def __init__(self, train_dataset, valid_dataset, train_dataloader_kwargs, valid_dataloader_kwargs):
         super().__init__()
-        self.dataset = dataset
-        self.dataloader_kwargs = dataloader_kwargs
+        self.train_dataloader_kwargs = train_dataloader_kwargs
+        self.valid_dataloader_kwargs = valid_dataloader_kwargs
+        self.train_dataset = train_dataset
+        self.valid_dataset = valid_dataset
 
-        # self.train_dataset, self.val_dataset = random_split(self.dataset1, [0.8, 0.2])
-        self.train_dataset, self.val_dataset = dataset, dataset
-        cprint(f"Warning: RLDBModule is using the same dataset for train and val", "yellow")
-
-    
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, shuffle=True, **self.dataloader_kwargs)
+        return DataLoader(self.train_dataset, shuffle=True, **self.train_dataloader_kwargs)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, shuffle=False, **self.dataloader_kwargs)
+        return DataLoader(self.val_dataset, shuffle=False, **self.valid_dataloader_kwargs)
 
 
 class DualDataModuleWrapper(LightningDataModule):

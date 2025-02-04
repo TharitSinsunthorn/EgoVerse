@@ -371,9 +371,9 @@ class PolicyStem(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
 
-    def init_cross_attn(self, stem_spec, modality: str):
+    def init_cross_attn(self, stem_spec):
         """ initialize cross attention module and the learnable tokens """
-        token_num = getattr(stem_spec.crossattn_latent, modality)
+        token_num = stem_spec.crossattn_latent
         self.tokens = nn.Parameter(
             torch.randn(1, token_num, stem_spec.modality_embed_dim) * INIT_CONST
         )

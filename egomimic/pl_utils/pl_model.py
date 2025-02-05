@@ -83,7 +83,7 @@ class ModelWrapper(LightningModule):
 
         ## images is now a dict
         
-        for key, images in images_dict
+        for key, images in images_dict:
             self.val_image_buffer[key].extend(torch.from_numpy(images))
             if len(self.val_image_buffer[key]) >= 1000:
                 frames = torch.stack(self.val_image_buffer[key])
@@ -96,7 +96,7 @@ class ModelWrapper(LightningModule):
     
     @rank_zero_only
     def on_validation_end(self):
-        for key, buffer in self.val_image_buffer.items()
+        for key, buffer in self.val_image_buffer.items():
             if len(buffer) != 0:
                 frames = torch.stack(buffer)
                 path = os.path.join(self.video_dir(), str(get_embodiment(key)), f"epoch_{self.trainer.current_epoch}/validation_video_{self.val_counter}.mp4")

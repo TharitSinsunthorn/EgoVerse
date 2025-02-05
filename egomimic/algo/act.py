@@ -199,13 +199,19 @@ class ACT(Algo):
         latent_dim,
     ):
         super().__init__()
-        self.data_schematic = data_schematic
+
+        if len(data_schematic.keys() > 1):
+            raise ValueError("ACT should only have 1 dataset")
+
+        #NOTE: Since data_schematic is now a dict of data schematics, we have to filter the first key.
+        dataset_key = next(iter(data_schematic))
+        self.data_schematic = data_schematic[dataset_key]
         self.camera_transforms = camera_transforms
-        self.camera_keys = data_schematic.keys_of_type("camera_keys")
-        self.proprio_keys = data_schematic.keys_of_type("proprio_keys")
-        if len(data_schematic.keys_of_type("action_keys")) > 1:
+        self.camera_keys = self.data_schematic.keys_of_type("camera_keys")
+        self.proprio_keys = self.data_schematic.keys_of_type("proprio_keys")
+        if len(self.data_schematic.keys_of_type("action_keys")) > 1:
             raise ValueError("ACT should only have one action key")
-        self.ac_key = data_schematic.keys_of_type("action_keys")[0]
+        self.ac_key = self.data_schematic.keys_of_type("action_keys")[0]
         self.obs_keys = self.proprio_keys + self.camera_keys
 
         self.chunk_size = chunk_size
@@ -219,12 +225,12 @@ class ACT(Algo):
         if len(backbones) != len(self.camera_keys):
             raise ValueError(f"Number of backbones ({len(backbones)}) doesn't match number of camera_keys ({len(self.camera_keys)}) ")
 
-        num_channels = backbones[0].output_shape(data_schematic.key_shape(self.camera_keys[0]))[0]
-        a_dim = data_schematic.key_shape(self.ac_key)[-1]
+        num_channels = backbones[0].output_shape(self.data_schematic.key_shape(self.camera_keys[0]))[0]
+        a_dim = self.data_schematic.key_shape(self.ac_key)[-1]
         
         if len(self.proprio_keys) > 1:
             raise ValueError(f"Current implementation only supports one proprio_key but got proprio_keys={self.proprio_keys}")
-        state_dim = data_schematic.key_shape(self.proprio_keys[0])[-1]
+        state_dim = self.data_schematic.key_shape(self.proprio_keys[0])[-1]
 
         if len(self.data_schematic.norm_stats.keys()) != 1:
             raise ValueError("ACT expects only single embodiment to be in dataset, instead found embodiment keys: ", self.data_schematic.norm_stats.keys())

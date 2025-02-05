@@ -1,4 +1,4 @@
-defaults:
+    defaults:
   - model: act
   - paths: default
   - trainer: ddp
@@ -25,27 +25,48 @@ launch_params:
   gpus_per_node: 1
   nodes: 1
 
-#TODO: change schematic dict to embodiments
-data_schematic: # Dynamically fill in these shapes from the dataset
-  _target_: rldb.utils.DataSchematic
-  schematic_dict:
-    front_img_1:
-      key_type: camera_keys
-      lerobot_key: observations.images.front_img_1
-    right_wrist_img:
-      key_type: camera_keys
-      lerobot_key: observations.images.right_wrist_img
-    left_wrist_img:
-      key_type: camera_keys
-      lerobot_key: observations.images.left_wrist_img
-    joint_positions:
-      key_type: proprio_keys
-      lerobot_key: observations.state.joint_positions
-    actions_joints:
-      key_type: action_keys
-      lerobot_key: actions_joints
-    embodiment:
-      key_type: metadata_keys
-      lerobot_key: metadata.embodiment
-
-  viz_img_key: front_img_1
+data_schematic_dict: # Dynamically fill in these shapes from the dataset
+  dataset1:
+    _target_: rldb.utils.DataSchematic
+    schematic_dict:
+      front_img_1:
+        key_type: camera_keys
+        lerobot_key: observations.images.front_img_1
+      right_wrist_img:
+        key_type: camera_keys
+        lerobot_key: observations.images.right_wrist_img
+      left_wrist_img:
+        key_type: camera_keys
+        lerobot_key: observations.images.left_wrist_img
+      joint_positions:
+        key_type: proprio_keys
+        lerobot_key: observations.state.joint_positions
+      actions_joints:
+        key_type: action_keys
+        lerobot_key: actions_joints
+      embodiment:
+        key_type: metadata_keys
+        lerobot_key: metadata.embodiment
+    viz_img_key: front_img_1
+  dataset2:
+    _target_: rldb.utils.DataSchematic
+    schematic_dict:
+      front_img_1:
+        key_type: camera_keys
+        lerobot_key: observations.images.front_img_1
+      right_wrist_img:
+        key_type: camera_keys
+        lerobot_key: observations.images.right_wrist_img
+      left_wrist_img:
+        key_type: camera_keys
+        lerobot_key: observations.images.left_wrist_img
+      joint_positions:
+        key_type: proprio_keys
+        lerobot_key: observations.state.joint_positions
+      actions_joints:
+        key_type: action_keys
+        lerobot_key: actions_joints
+      embodiment:
+        key_type: metadata_keys
+        lerobot_key: metadata.embodiment
+    viz_img_key: front_img_1

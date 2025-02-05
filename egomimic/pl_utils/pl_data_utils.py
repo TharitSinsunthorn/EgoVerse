@@ -8,7 +8,12 @@ from rldb.utils import RLDBDataset
 from termcolor import cprint
 
 class RLDBModule(LightningDataModule):
+    """
+    Deprecated and is not supported by trainHydra.py
+    """
     def __init__(self, train_dataset, valid_dataset, train_dataloader_kwargs, valid_dataloader_kwargs):
+        cprint("RLDBModule is deprecated and is not supported by trainHydra.py. Use MultiDataModuleWrapper instead", "red")
+
         super().__init__()
         self.train_dataloader_kwargs = train_dataloader_kwargs
         self.valid_dataloader_kwargs = valid_dataloader_kwargs
@@ -62,6 +67,10 @@ class DualDataModuleWrapper(LightningDataModule):
     Same as DataModuleWrapper but there are two train datasets and two valid datasets
     """
 
+    """
+    Deprecated and is not supported by trainHydra.py
+    """
+
     def __init__(
         self,
         train_dataset1,
@@ -75,6 +84,8 @@ class DualDataModuleWrapper(LightningDataModule):
         Args:
             data_module_fn (function): function that returns a LightningDataModule
         """
+        cprint("DualDataModuleWrapper is deprecated and is not supported by trainHydra.py. Use MultiDataModuleWrapper instead", "red")
+
         super().__init__()
         self.train_dataset1 = train_dataset1
         self.valid_dataset1 = valid_dataset1

@@ -37,23 +37,40 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if cfg.get("seed"):
         L.seed_everything(cfg.seed, workers=True)
     
-    log.info(f"Instantiating data schematic <{cfg.data_schematic._target_}>")
-    data_schematic: DataSchematic = hydra.utils.instantiate(cfg.data_schematic)
+    data_schematic_dict = {}
+    
+    for dataset, schematic in cfg.data_schematic_dict.items():
+        log.info(f"Instantiating data schematic <{schematic._target_}> for <{dataset}>")
+        data_schematic: DataSchematic = hydra.utils.instantiate(schematic)
+        data_schematic_dict[dataset] = data_schematic
+
+    # Modify dataset configs to include `data_schematic` dynamically at runtime
+    for dataset_name in cfg.data.train_datasets:
+        log.info(f"Instantiating train datasets with data schematics")
+        cfg.data.train_datasets[dataset_name] = hydra.utils.instantiate(
+            cfg.data.train_datasets[dataset_name], data_schematic=data_schematic_dict[dataset_name]
+        )
+    for dataset_name in cfg.data.valid_datasets:
+        log.info(f"Instantiating valid datasets with data schematics")
+        cfg.data.valid_datasets[dataset_name] = hydra.utils.instantiate(
+            cfg.data.valid_datasets[dataset_name], data_schematic=data_schematic_dict[dataset_name]
+        )
 
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")
-    datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data, dataset={"data_schematic": data_schematic})
-    
-    # Initialize the data schematic's shapes.  During training we manually calls these functions to infer shapes / norm stats.  At eval, the data_schematic will simply be loaded from the checkpoint.
+    assert cfg.data.__target__ == "MultiDataModuleWrapper", "cfg.data.__target__ must be 'MultiDataModuleWrapper'"
+    datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
 
+    # TODO: deprecate shape inference in favor of LeRobotDatasetMetadata
+    # NOTE: Since data_schematic is a dict we have per dataset data_schematics that need to infer shapes and norms
+    for dataset_name, data_schematic in data_schematic_dict.items():
+        log.info(f"Inferring shapes for dataset <{dataset_name}>")
+        data_schematic.infer_shapes_from_batch(datamodule.train_datasets[dataset_name])
+        data_schematic.infer_norm_from_dataset(datamodule.train_datasets[dataset_name])
     
-    # TODO: change this to call for each data loader
-    data_schematic.infer_shapes_from_batch(datamodule.train_dataset[0])
-    # data_schematic.set_norm_stats(datamodule.dataset.get_obs_normalization_stats())
-    data_schematic.infer_norm_from_dataset(datamodule.train_dataset)
-    
-    #NOTE: We also pass the data_schematic into the robomimic model's instatiation now that we've initialzied the shapes and norm stats.  In theory, upon loading the PL checkpoint, it will remember this, but let's see.
+    #TODO: Handle dictionary style data_schematic on algorithm side. For ACT theoretically this should just be accessing the first key
+    #NOTE: We also pass the data_schematic_dict into the robomimic model's instatiation now that we've initialzied the shapes and norm stats.  In theory, upon loading the PL checkpoint, it will remember this, but let's see.
     log.info(f"Instantiating model <{cfg.model._target_}>")
-    model: LightningModule = hydra.utils.instantiate(cfg.model, robomimic_model={"data_schematic": data_schematic})
+    model: LightningModule = hydra.utils.instantiate(cfg.model, robomimic_model={"data_schematic": data_schematic_dict})
 
     log.info("Instantiating callbacks...")
     callbacks: List[Callback] = instantiate_callbacks(cfg.get("callbacks"))

@@ -37,6 +37,7 @@ source emimic/bin/activate
 git clone --recursive git@github.com:GaTech-RL2/EgoMimic-dev.git
 cd EgoMimic
 uv pip install -r pyproject.toml
+uv pip install projectaria-tools'[all]'
 uv pip install -e external/robomimic
 uv pip install -e external/rldb
 uv pip install -e external/rldb/external/lerobot

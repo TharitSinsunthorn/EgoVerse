@@ -44,17 +44,6 @@ Set `git config --global submodule.recurse true` if you want `git pull` to autom
 Set your wandb project in ``egomimic/hydra_configs/logger/wandb.yaml``
 
 ## Quick Start
-Training creates a folder for each experiment
-```
-./trained_models_highlevel/description/name
-├── videos (generated offline validation videos)
-├── logs (wandb logs)
-├── slurm (slurm logs if launched via slurm)
-├── config.json (copy of config used to launch this run)
-├── models (model ckpts)
-├── ds1_norm_stats.pkl (robot dataset normalization stats)
-└── ds2_norm_stats.pkl (hand data norm stats if training egomimic)
-```
 ### Processing your own data for training
 ![Data Streams](./assets/train_data.png)
 See [``data_processing.md``](./data_processing.md)

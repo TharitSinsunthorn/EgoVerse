@@ -655,8 +655,10 @@ class DatasetConverter:
 
         if self.arm == "both":
             self.robot_type = "eve_bimanual"
-        else:
-            self.robot_type = "eve_single"        
+        elif self.arm == "right":
+            self.robot_type = "eve_right_arm"
+        elif self.arm == "left":
+            self.robot_type = "eve_left_arm"          
         
         self.features, metadata = AlohaHD5Extractor.define_features(
             processed_episode,

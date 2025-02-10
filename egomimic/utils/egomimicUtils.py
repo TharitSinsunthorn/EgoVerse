@@ -26,6 +26,14 @@ ARIA_INTRINSICS = np.array(
     ]
 )
 
+ARIA_INTRINSICS_HALF = np.array(
+    [
+        [133.25430222, 0.0, 320 / 2, 0],
+        [0.0, 133.25430222, 240 / 2, 0],
+        [0.0, 0.0, 1.0, 0],
+    ]
+)
+
 
 # Cam to base extrinsics
 EXTRINSICS = {
@@ -52,7 +60,7 @@ EXTRINSICS = {
 }
 
 INTRINSICS = {
-    "base": ARIA_INTRINSICS
+    "base": ARIA_INTRINSICS_HALF
 }
 
 class CameraTransforms:

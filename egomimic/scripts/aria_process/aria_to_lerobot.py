@@ -14,7 +14,7 @@ from enum import Enum
 from egomimic.utils.egomimicUtils import (
     str2bool,
     cam_frame_to_cam_pixels,
-    WIDE_LENS_HAND_LEFT_K,
+    INTRINSICS,
     interpolate_keys,
     interpolate_arr
 )
@@ -358,12 +358,16 @@ class AriaVRSExtractor:
         """
         ac_dim = actions.shape[-1]
         actions_flat = actions.copy().reshape((-1, 3))
+        N, C, H, W = images.shape
 
+        if H == 480:
+            intrinsics = INTRINSICS["base"]
+        elif H == 240:
+            intrinsics = INTRINSICS["base_half"]
         px = cam_frame_to_cam_pixels(
-            actions_flat, WIDE_LENS_HAND_LEFT_K
+            actions_flat, intrinsics
         )
         px = px.reshape((-1, CHUNK_LENGTH, ac_dim))
-        N, C, H, W = images.shape
         if ac_dim == 3:
             bad_data_mask = (
                 (px[:, :, 0] < 0)

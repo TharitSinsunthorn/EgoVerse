@@ -15,6 +15,7 @@ import torch.nn as nn
 import einops
 import pandas as pd
 import pyarrow.parquet as pq
+import huggingface_hub
 
 STD_SCALE = 0.02
 
@@ -94,7 +95,6 @@ class EinOpsRearrange(nn.Module):
         return einops.rearrange(x, self.rearrange_expr, **self.kwargs)
 
 def download_from_huggingface(huggingface_repo_id: str):
-    import huggingface_hub
 
     folder = huggingface_hub.snapshot_download(huggingface_repo_id)
     return folder

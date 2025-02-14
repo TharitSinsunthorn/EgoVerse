@@ -72,6 +72,17 @@ def transform_ee_pose(ee_pose):
         ee_pose[:, 4] *= -1  # Multiply y by -1 for second set
 
     return ee_pose
+    
+def transform_actions(actions):
+    if actions.shape[-1] == 3:
+        actions[..., 0] *= -1  # Multiply x by -1
+        actions[..., 1] *= -1  # Multiply y by -1
+    elif actions.shape[-1] == 6:
+        actions[..., 0] *= -1  # Multiply x by -1 for first set
+        actions[..., 1] *= -1  # Multiply y by -1 for first set
+        actions[..., 3] *= -1  # Multiply x by -1 for second set
+        actions[..., 4] *= -1  # Multiply y by -1 for second set
+    return actions
 
 class AriaVRSExtractor:
     TAGS = ["aria", "robotics", "vrs"]
@@ -333,7 +344,7 @@ class AriaVRSExtractor:
             if np.any(rotated_actions_t):
                 actions.append(rotated_actions_t)
 
-        actions = np.array(actions)
+        actions = np.array(transform_actions(actions))
 
         if not prestack:
             actions = actions[:, 1, :]

@@ -51,6 +51,9 @@ Set your wandb project in ``egomimic/hydra_configs/logger/wandb.yaml``
 ![Data Streams](./assets/train_data.png)
 See [``data_processing.md``](./data_processing.md)
 
+### Pulling processed data for training from AWS
+See [``training_aws.md``](./training_aws.md)
+
 ## Hydra Comands
 `python egomimic/trainHydra.py`
 

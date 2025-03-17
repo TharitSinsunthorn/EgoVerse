@@ -3,7 +3,7 @@ from collections import OrderedDict
 
 import numpy as np
 import psutil
-import robomimic.utils.tensor_utils as TensorUtils
+import egomimic.utils.tensor_utils as TensorUtils
 import torch
 from lightning import LightningModule
 from egomimic.utils.egomimicUtils import nds

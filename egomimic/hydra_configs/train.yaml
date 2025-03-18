@@ -1,5 +1,5 @@
 defaults:
-  - model: hpt
+  - model: hpt_cotrain
   - paths: default
   - trainer: ddp
   - debug: null

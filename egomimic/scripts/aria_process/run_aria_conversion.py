@@ -53,17 +53,39 @@ def vrs_bundles(task_dir: Path):
             continue
         yield vrs, jsonf, mps
 
+def load_meta_fields(vrs_file: Path) -> dict:
+    """Loads metadata from corresponding {vrs_name}_meta.csv"""
+    meta_file = vrs_file.parent / f"{vrs_file.stem}_meta.csv"
+    if not meta_file.exists():
+        return {}
+    with meta_file.open() as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        if not rows:
+            return {}
+        return rows[0]
+
 def append_status(row: dict):
     with FileLock(str(LOCK_PATH)):
-        new_file = not LOCAL_STATUS.exists()
-        with LOCAL_STATUS.open("a", newline="") as f:
-            wr = csv.DictWriter(
-                f, fieldnames=["task", "vrs", "total_frames", "output_path"])
-            if new_file:
-                wr.writeheader()
-            wr.writerow(row)
+        if LOCAL_STATUS.exists():
+            with LOCAL_STATUS.open("r", newline="") as f:
+                reader = list(csv.DictReader(f))
+                existing_fieldnames = set(reader[0].keys()) if reader else set()
+                rows = reader
+        else:
+            existing_fieldnames = set()
+            rows = []
 
-        # upload the updated CSV without copying metadata that S3FS dislikes
+        new_fields = set(row.keys()) - existing_fieldnames
+        all_fields = list(existing_fieldnames.union(row.keys()))
+
+        rows.append(row)
+        with LOCAL_STATUS.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=all_fields)
+            writer.writeheader()
+            for r in rows:
+                writer.writerow(r)
+
         boto3.client("s3").upload_file(
             str(LOCAL_STATUS), "rldb", "processed/vrs_conversion_status.csv")
 
@@ -138,8 +160,15 @@ def launch(dry: bool = False):
         done_ref, _ = ray.wait(list(pending), num_returns=1)
         ds_path, frames = ray.get(done_ref[0])
         task, vrs_stem  = pending.pop(done_ref[0])
-        append_status({"task": task, "vrs": vrs_stem,
-                       "total_frames": frames, "output_path": ds_path})
+        meta = load_meta_fields(RAW_ROOT / task / f"{vrs_stem}.vrs")
+        row = {
+            "task": task,
+            "vrs": vrs_stem,
+            "total_frames": frames,
+            "output_path": ds_path
+        }
+        row.update(meta)
+        append_status(row)
 
 # ───────────────── CLI ──────────────────────────────────────────
 if __name__ == "__main__":

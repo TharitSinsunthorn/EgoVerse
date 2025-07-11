@@ -13,6 +13,7 @@ This repository contains the data processing and training code for EgoVerse and 
 - [``data_processing.md``](./data_processing.md): Instructions to process your own data, both Aria Human data and teleoperated robot data.
 - [``egomimic/evaluation``](./egomimic/evaluation/): Evaluation scripts
 - [``egoverse.md``](./egoverse.md): Instructions to upload data to S3 bucket
+- [``vrs_upload.md``](./vrs_upload.md): Instructions to use a GUI to add metadata, rename and upload VRS files in a directory to S3 bucket
 
 ## Installation
 
@@ -22,7 +23,7 @@ git clone --recursive git@github.com:GaTech-RL2/EgoMimic-dev.git
 cd EgoMimic
 conda env create -f environment.yaml
 conda activate emimic
-pip install projectaria-tools'[all]'
+pip install projectaria-tools'[all]'==1.5.7
 pip install -e external/rldb
 pip install -e external/rldb/external/lerobot
 pip install -e .

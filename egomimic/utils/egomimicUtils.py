@@ -394,7 +394,60 @@ def ee_pose_to_cam_pixels(ee_pose_base, T_cam_base, intrinsics):
     px_val = px_val / px_val[2, :]
 
     return px_val.T
+    
+def pose_to_transform(pose):
+    """
+    Convert a 6D pose [x, y, z, yaw, pitch, roll] into a 4x4 homogeneous transform.
+    Assumes Euler angles are in radians and follow ZYX (yaw-pitch-roll) order.
+    """
+    x, y, z, yaw, pitch, roll = pose
 
+    # Compute individual rotation matrices
+    Rz = np.array([
+        [np.cos(yaw), -np.sin(yaw), 0],
+        [np.sin(yaw),  np.cos(yaw), 0],
+        [0,            0,           1]
+    ])
+    Ry = np.array([
+        [np.cos(pitch), 0, np.sin(pitch)],
+        [0,             1, 0],
+        [-np.sin(pitch),0, np.cos(pitch)]
+    ])
+    Rx = np.array([
+        [1, 0,            0],
+        [0, np.cos(roll), -np.sin(roll)],
+        [0, np.sin(roll),  np.cos(roll)]
+    ])
+    
+    # Combined rotation: note the multiplication order
+    R = Rz @ Ry @ Rx
+
+    # Assemble homogeneous transformation matrix
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = [x, y, z]
+    return T
+    
+def transform_to_pose(T):
+    """
+    Convert a 4x4 homogeneous transform back to a 6D pose [x, y, z, yaw, pitch, roll].
+    Uses the ZYX (yaw-pitch-roll) convention.
+    """
+    x, y, z = T[:3, 3]
+    R = T[:3, :3]
+
+    # Extract pitch from the (3,1) element of R
+    pitch = np.arcsin(-R[2, 0])
+    # To avoid numerical issues, check for gimbal lock:
+    cos_pitch = np.cos(pitch)
+    if np.abs(cos_pitch) > 1e-6:
+        yaw = np.arctan2(R[1, 0], R[0, 0])
+        roll = np.arctan2(R[2, 1], R[2, 2])
+    else:
+        # Gimbal lock: arbitrarily set yaw=0
+        yaw = 0
+        roll = np.arctan2(-R[0, 1], R[1, 1])
+    return np.array([x, y, z, yaw, pitch, roll])
 
 def cam_frame_to_cam_pixels(ee_pose_cam, intrinsics):
     """

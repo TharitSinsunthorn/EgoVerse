@@ -1,0 +1,57 @@
+defaults:
+  - hpt_cotrain_enc_dec_base
+
+robomimic_model:
+  domains: ["eve_bimanual", "aria_bimanual"]
+  diffusion: true 
+  head_specs:
+    shared: null
+    aria_bimanual: 
+      _target_: egomimic.models.fm_policy.FMPolicy
+      action_horizon: 100
+      num_inference_steps: 50
+      pooling: "flatten"
+      time_dist: "beta"
+      infer_ac_dims:
+        aria_bimanual: 12
+      model:
+        _target_:  egomimic.models.denoising_nets.ConditionalUnet1D
+        input_dim: 12
+        cond_dim: 256
+        ac_latent_seq: 8
+        diffusion_step_embed_dim: 256
+        down_dims: [64, 128, 256]
+        kernel_size: 3
+        n_groups: 8
+        cond_predict_scale: True
+
+    eve_bimanual: 
+      _target_: egomimic.models.fm_policy.FMPolicy
+      action_horizon: 100
+      num_inference_steps: 50
+      pooling: "flatten"
+      time_dist: "beta"
+      infer_ac_dims:
+        eve_bimanual: 14
+      model:
+        _target_:  egomimic.models.denoising_nets.ConditionalUnet1D
+        input_dim: 14
+        cond_dim: 256
+        ac_latent_seq: 8
+        diffusion_step_embed_dim: 256
+        down_dims: [64, 128, 256]
+        kernel_size: 3
+        n_groups: 8
+        cond_predict_scale: True
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 3e-4
+  weight_decay: 0.0001
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  _partial_: true
+  T_max: 1400
+  eta_min: 1e-5

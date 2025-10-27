@@ -7,7 +7,7 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: ~/.ssh/ryan-mac.pem
+  ssh_private_key: ~/add your ssh private key here.pem
 
 max_workers: 15
 idle_timeout_minutes: 10

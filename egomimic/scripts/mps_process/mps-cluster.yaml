@@ -7,7 +7,7 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: ~/add your ssh private key here.pem
+  ssh_private_key: ~/.ssh/ryan-mac.pem
 
 max_workers: 15
 idle_timeout_minutes: 10
@@ -48,6 +48,8 @@ available_node_types:
     max_workers: 15
 
 head_node_type: head_node
+
+initialization_commands:
   - sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq python3-pip python3-dev git fuse3 curl wget
   - sudo DEBIAN_FRONTEND=noninteractive apt-get update -yq
   - curl -O https://bootstrap.pypa.io/get-pip.py

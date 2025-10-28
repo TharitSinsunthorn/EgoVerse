@@ -295,6 +295,7 @@ class AriaVRSExtractor:
 
         return episode_feats
 
+    
     @staticmethod
     def get_action(pose : np.array, mps_reader, vrs_reader, stream_timestamps_ns : dict, transform : np.array, arm : str, hand_tracking_results, HORIZON=HORIZON_DEFAULT, STEP=STEP_DEFAULT, prestack=False, no_rot=False):
         """
@@ -927,7 +928,8 @@ class DatasetConverter:
         self.logger.info(f"#writer processes: {self.image_writer_processes}")
         self.logger.info(f"#writer threads: {self.image_writer_threads}")
 
-        
+        self._mp4_path = None     # set from main() if --save-mp4
+        self._mp4_writer = None   # lazy-initialized in extract_episode()
         self.episode_list = list(self.raw_path.glob("*.vrs"))
         self.buffer = []
 
@@ -954,6 +956,38 @@ class DatasetConverter:
         )
 
         self.logger.info(f"Dataset Features: {self.features}")
+    
+    def save_preview_mp4(self, frames: list[dict], output_path: Path, fps: int, image_compressed: bool):
+        """
+        Save a single half-resolution MP4 from a list of frame dicts.
+        Each frame dict must contain 'observations.images.front_img_1' -> torch.Tensor (C,H,W) uint8.
+        """
+        img_key = "observations.images.front_img_1"
+        imgs = [f[img_key] for f in frames if img_key in f]
+        if not imgs:
+            print(f"[MP4] No frames with key '{img_key}' found — skipping video save.")
+            return
+
+        C, H, W = imgs[0].shape
+        size = (W // 2, H // 2)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(str(output_path), fourcc, fps, size)
+
+        for chw in imgs:
+            np_chw = chw.detach().cpu().numpy()        # (C,H,W)
+            if np_chw.shape[0] == 1:
+                np_chw = np.repeat(np_chw, 3, axis=0)  # grayscale → 3-ch
+            np_hwc = np.transpose(np_chw, (1, 2, 0))   # CHW → HWC
+            # If images were decoded with cv2 (compressed), they're already BGR;
+            # otherwise convert RGB→BGR for OpenCV.
+            if not image_compressed:
+                np_hwc = cv2.cvtColor(np_hwc, cv2.COLOR_RGB2BGR)
+            np_hwc = cv2.resize(np_hwc, size)
+            writer.write(np_hwc)
+
+        writer.release()
+        print(f"[MP4] Saved half-res preview to {output_path}")
 
     def extract_episode(self, episode_path, task_description: str = ""):
         """
@@ -976,6 +1010,12 @@ class DatasetConverter:
             arm=self.arm,
             prestack=self.prestack
         )
+        
+        if self._mp4_path is not None:
+            ep_stem = Path(episode_path).stem
+            mp4_path = self._mp4_path / f"{ep_stem}_video.mp4"
+            self.save_preview_mp4(frames, mp4_path, self.fps, self.image_compressed)
+
 
         for i, frame in enumerate(frames):
             self.buffer.append(frame)
@@ -1069,6 +1109,7 @@ class DatasetConverter:
             shutil.rmtree(output_dir / name)
 
         output_dir = output_dir / name
+        self._out_base = Path(output_dir)
 
         self.dataset = LeRobotDataset.create(
             repo_id=self.dataset_repo_id,
@@ -1110,6 +1151,11 @@ def argument_parse():
     # Debugging and output configuration
     parser.add_argument("--output-dir", type=Path, default=Path(LEROBOT_HOME), help="Directory where the processed dataset will be stored. Defaults to LEROBOT_HOME.")
     parser.add_argument("--debug", action="store_true", help="Store only 2 episodes for debug purposes.")
+    
+    parser.add_argument("--save-mp4", type=str2bool, default=True,
+                        help="If True, save a single half-resolution MP4 with all frames across episodes.")
+
+
 
     args = parser.parse_args()
 
@@ -1145,7 +1191,8 @@ def main(args):
 
     # Initialize the dataset
     converter.init_lerobot_dataset(output_dir=args.output_dir, name=Path(args.name))
-
+    if args.save_mp4:
+        converter._mp4_path = converter._out_base
     # Extract episodes
     converter.extract_episodes(episode_description=args.description)
 

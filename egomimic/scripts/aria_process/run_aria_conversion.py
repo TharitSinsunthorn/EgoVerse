@@ -245,10 +245,16 @@ def launch(dry: bool = False, skip_if_done: bool = False):
         if row is None:
             print(f"[WARN] Episode {episode_key}: row disappeared before update?")
             continue
+        
 
-        row.processed_path = _map_processed_local_to_remote(ds_path) or ""
         row.num_frames = frames if isinstance(frames, int) else -1
-        row.mp4_path = _map_processed_local_to_remote(mp4_path) or ""
+        
+        if row.num_frames > 0:
+            row.processed_path = _map_processed_local_to_remote(ds_path) or ""
+            row.mp4_path = _map_processed_local_to_remote(mp4_path) or ""
+        else:
+            row.processed_path = ""
+            row.mp4_path = ""
 
         try:
             update_episode(engine, row)

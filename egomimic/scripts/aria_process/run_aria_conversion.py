@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Iterator, Tuple
 
 import ray
+import traceback
 
 # --- Conversion wrapper ------------------------------------------------------
 from aria_helper import lerobot_job
@@ -38,7 +39,8 @@ from egomimic.utils.aws.aws_sql import (
 # --- Paths -------------------------------------------------------------------
 RAW_ROOT = Path("/mnt/raw")
 PROCESSED_ROOT = Path("/mnt/processed")
-
+PROCESSED_LOCAL_ROOT = Path(os.environ.get("PROCESSED_LOCAL_ROOT", "/mnt/processed")).resolve()
+PROCESSED_REMOTE_PREFIX = os.environ.get("PROCESSED_REMOTE_PREFIX", "rldb:/processed_v2/aria").rstrip("/")
 
 # --- Utilities ---------------------------------------------------------------
 def ensure_path_ready(p: str | Path, retries: int = 30) -> bool:
@@ -52,6 +54,16 @@ def ensure_path_ready(p: str | Path, retries: int = 30) -> bool:
         time.sleep(1)
     return False
 
+def _map_processed_local_to_remote(p: str | Path) -> str:
+    """Map any path under PROCESSED_LOCAL_ROOT → PROCESSED_REMOTE_PREFIX/relative."""
+    if not p:
+        return ""
+    p = Path(p).resolve()
+    try:
+        rel = p.relative_to(PROCESSED_LOCAL_ROOT)  # raises if not under root
+    except Exception:
+        return str(p)
+    return f"{PROCESSED_REMOTE_PREFIX}/{rel.as_posix()}" if PROCESSED_REMOTE_PREFIX else str(p)
 
 def iter_vrs_bundles(root: Path) -> Iterator[Tuple[Path, Path, Path]]:
     """
@@ -157,7 +169,7 @@ def convert_one_bundle(
             except Exception:
                 frames = -1
 
-        candidate = ds_path / f"{stem}_video.mp4"
+        candidate = ds_parent / f"{stem}_video.mp4"
         if candidate.exists():
             mp4_str = str(candidate)
         else:
@@ -167,7 +179,8 @@ def convert_one_bundle(
         return str(ds_path), mp4_str, frames
 
     except Exception as e:
-        print(f"[FAIL] {stem}: {e}", flush=True)
+        err_msg = f"[FAIL] {stem}: {e}\n{traceback.format_exc()}"
+        print(err_msg, flush=True)
         return str(ds_path), "", -1
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -204,8 +217,19 @@ def launch(dry: bool = False, skip_if_done: bool = False):
         description = row.task_description or ""
 
         if dry:
+            ds_path = (PROCESSED_ROOT / f"{name}_processed").resolve()
+            stem = vrs.stem
+            mp4_candidate = PROCESSED_ROOT / f"{stem}_video.mp4"
+
+            mapped_ds = _map_processed_local_to_remote(ds_path)
+            mapped_mp4 = _map_processed_local_to_remote(mp4_candidate)
+
             print(
-                f"[DRY] {name}: arm={arm} → {out_dir}/{dataset_name} | desc='{description[:60]}'"
+                f"[DRY] {name}: arm={arm} | out_dir={out_dir}/{dataset_name}\n"
+                f"      desc='{description[:60]}'\n"
+                f"      would write to SQL:\n"
+                f"        processed_path={mapped_ds}\n"
+                f"        mp4_path={mapped_mp4}"
             )
             continue
 
@@ -234,10 +258,21 @@ def launch(dry: bool = False, skip_if_done: bool = False):
         if row is None:
             print(f"[WARN] Episode {episode_key}: row disappeared before update?")
             continue
-
-        row.processed_path = ds_path or ""
-        row.num_frames = frames if isinstance(frames, int) else -1
-        row.mp4_path = mp4_path or ""
+        
+        print(f"[DEBUG_BEFORE_NUM_FRAMES] episode_key={episode_key}")
+        print(f"[DEBUG_BEFORE_NUM_FRAMES] ds_path={ds_path}")
+        print(f"[DEBUG_BEFORE_NUM_FRAMES] mp4_path={mp4_path}")
+        print(f"[DEBUG_BEFORE_NUM_FRAMES] frames={frames} type={type(frames)}")
+        print(f"[DEBUG_BEFORE_NUM_FRAMES] row={row}")
+        
+        row.num_frames = frames
+        
+        if row.num_frames > 0:
+            row.processed_path = _map_processed_local_to_remote(ds_path)
+            row.mp4_path = _map_processed_local_to_remote(mp4_path)
+        else:
+            row.processed_path = ""
+            row.mp4_path = ""
 
         try:
             update_episode(engine, row)

@@ -35,7 +35,7 @@ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/path/to/flash/
 ```
 
 ```
-uv venv emimic --python 3.10
+uv venv emimic --python 3.11
 source emimic/bin/activate
 git clone git@github.com:GaTech-RL2/EgoVerse.git
 cd EgoVerse

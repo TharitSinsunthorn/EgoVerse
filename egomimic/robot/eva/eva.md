@@ -107,6 +107,10 @@ This brings up `can1` and `can2` for the left and right arms.
 
 ## 6. Collecting demos
 
+> **Warning (hardware connections, before running `collect_demo.py`):**
+> - Plug the dock into the **THUNDERBOLT (PCIe) port below the GPU**.
+> - Plug the **Aria separately into a USB port** (not through the dock).
+
 Inside the container, from `/home/robot/robot_ws`:
 
 ```bash

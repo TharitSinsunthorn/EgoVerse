@@ -28,7 +28,7 @@ PROCESSED_ROOT = Path("/mnt/processed")
 PROCESSED_LOCAL_ROOT = Path(os.environ.get("PROCESSED_LOCAL_ROOT", "/mnt/processed")).resolve()
 PROCESSED_REMOTE_PREFIX = os.environ.get("PROCESSED_REMOTE_PREFIX", "rldb:/processed_v2/eva").rstrip("/")
 
-DEFAULT_EXTRINSICS_KEY = "ariaOct18_arx"
+DEFAULT_EXTRINSICS_KEY = "x5Dec10_2"
 
 
 def ensure_path_ready(p: str | Path, retries: int = 30) -> bool:

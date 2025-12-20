@@ -56,8 +56,24 @@ See [``data_processing.md``](./data_processing.md)
 See [``training_aws.md``](./training_aws.md)
 
 ## Hydra Comands
+### Quick start
+If you want to quickly train a robot BC policy using the default Hydra configuration on Eva robot data, simply run:
+
 `python egomimic/trainHydra.py`
 
+Important:
+The default EVA BC config pulls data from S3 to a local scratch directory where the path is set to my local path
+Before running, open:
+
+`EgoVerse/egomimic/hydra_configs/data/eva_bc_s3.yaml`
+
+and modify:
+
+`temp_root: /path/to/where/you/want/s3/data/stored`
+
+to point to a local disk location with sufficient space for caching the downloaded dataset.
+
+### Additional Options
 Debug (run on a compute node )
 `python egomimic/trainHydra.py trainer=debug logger=debug`
 

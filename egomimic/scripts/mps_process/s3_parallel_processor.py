@@ -30,9 +30,9 @@ Usage:
     python s3_parallel_processor.py --bucket my-bucket --local-dir /local \
         --include-failed-recordings
 
-    # Use custom path to failed_recordings.json
+    # Use custom path to recordings_status.json
     python s3_parallel_processor.py --bucket my-bucket --local-dir /local \
-        --failed-recordings-path custom/path/failed_recordings.json
+        --recordings-status-path custom/path/recordings_status.json
 """
 
 import argparse
@@ -41,7 +41,7 @@ import logging
 import os
 import shutil
 import subprocess
-from concurrent.futures import as_completed, Future, ThreadPoolExecutor
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -101,12 +101,14 @@ class RecordingStatus:
 
 
 # Configure logging with timestamp
+# Only enable DEBUG for our logger, not for boto3/urllib3/etc
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 # ============================================================================
@@ -172,14 +174,6 @@ class Boto3Backend:
             return None
         except (json.JSONDecodeError, Exception):
             return None
-
-    def file_exists(self, s3_key: str) -> bool:
-        """Check if a specific file exists in S3."""
-        try:
-            self.client.head_object(Bucket=self.bucket, Key=s3_key)
-            return True
-        except Exception:
-            return False
 
     def folder_exists(self, s3_prefix: str) -> bool:
         """Check if a folder (prefix) exists in S3."""
@@ -378,6 +372,17 @@ def get_hand_tracking_status_s3(
             details=f"Expected {expected_version}, got {actual_version}",
         )
 
+    # Note: hand_tracking summary.json may not have a "status" field like SLAM does.
+    # If present, check it; otherwise just check version.
+    if "status" in summary and summary.get("status") not in ("SUCCESS", "WARNING"):
+        return FeatureCheckResult(
+            feature="HAND_TRACKING",
+            status=FeatureStatus.FAILED,
+            expected_version=expected_version,
+            actual_version=actual_version,
+            details=f"Status is {summary.get('status')}",
+        )
+
     return FeatureCheckResult(
         feature="HAND_TRACKING",
         status=FeatureStatus.OK,
@@ -507,9 +512,9 @@ def get_recording_status_s3(
 def load_failed_recordings_from_s3(
     backend: Boto3Backend,
     s3_prefix: str,
-    failed_recordings_path: Optional[str] = None,
+    recordings_status_path: Optional[str] = None,
 ) -> Dict[str, Set[str]]:
-    """Load failed_recordings.json from S3 and return a dict of vrs_key -> set of failed features.
+    """Load recordings_status.json from S3 and return a dict of vrs_key -> set of failed features.
 
     The JSON structure is:
     {
@@ -524,31 +529,38 @@ def load_failed_recordings_from_s3(
 
     Args:
         backend: S3 backend for reading files
-        s3_prefix: S3 prefix (used if failed_recordings_path is not provided)
-        failed_recordings_path: Custom S3 path to failed_recordings.json. If provided,
+        s3_prefix: S3 prefix (used if recordings_status_path is not provided)
+        recordings_status_path: Custom S3 path to recordings_status.json. If provided,
                                 this path is used directly instead of deriving from s3_prefix.
 
     Returns:
         Dict mapping vrs_key to set of feature names that failed for that recording.
     """
-    if failed_recordings_path:
-        s3_key = failed_recordings_path
+    if recordings_status_path:
+        s3_key = recordings_status_path
     else:
         s3_key = (
-            f"{s3_prefix.rstrip('/')}/failed_recordings.json"
+            f"{s3_prefix.rstrip('/')}/recordings_status.json"
             if s3_prefix
-            else "failed_recordings.json"
+            else "recordings_status.json"
         )
 
+    logger.debug(f"Loading recordings_status from: s3://{backend.bucket}/{s3_key}")
     failed_recordings_data = backend.read_json(s3_key)
     if not failed_recordings_data:
+        logger.debug("No recordings_status.json found or file is empty")
         return {}
+
+    logger.debug(
+        f"Loaded {len(failed_recordings_data)} entries from recordings_status.json"
+    )
 
     result: Dict[str, Set[str]] = {}
     all_features = ["HAND_TRACKING", "SLAM", "EYE_GAZE"]
 
     for vrs_key, recording_data in failed_recordings_data.items():
         if not isinstance(recording_data, dict):
+            logger.debug(f"Skipping invalid entry for {vrs_key}: not a dict")
             continue
         failed_features = set()
         for feature in all_features:
@@ -562,6 +574,7 @@ def load_failed_recordings_from_s3(
         if failed_features:
             result[vrs_key] = failed_features
 
+    logger.debug(f"Total failed recordings loaded: {len(result)}")
     return result
 
 
@@ -575,7 +588,11 @@ def filter_files_needing_processing(
     """Filter VRS files to only those that need processing.
 
     Uses ThreadPoolExecutor to check multiple files in parallel.
-    Excludes recordings that are marked as failed for the requested features.
+
+    Logic (S3 is source of truth):
+    1. Check S3 to see which features are missing/need processing
+    2. For features that need processing, check recordings_status.json to see if they previously failed
+    3. Skip features that are known to have failed (unless --include-failed-recordings is used)
 
     Args:
         vrs_keys: List of VRS file keys to check
@@ -587,25 +604,58 @@ def filter_files_needing_processing(
 
     def check_file(vrs_key: str) -> Optional[str]:
         """Check if a single file needs processing."""
-        # Skip if this recording failed for ALL requested features
+        filename = Path(vrs_key).name
+
+        # Determine which features to check
+        features_to_check = (
+            requested_features
+            if requested_features
+            else ["HAND_TRACKING", "SLAM", "EYE_GAZE"]
+        )
+
+        # Step 1: Check S3 to see which features need processing (source of truth)
+        mps_key = get_mps_key_from_vrs_key(vrs_key)
+        features_needed_on_s3 = get_features_needed_s3(
+            backend, mps_key, features_to_check
+        )
+
+        if not features_needed_on_s3:
+            logger.debug(f"{filename}: all requested features already OK on S3")
+            return None
+
+        # Step 2: For features that need processing, check if they previously failed
+        features_to_process = list(features_needed_on_s3)
         if failed_recordings and vrs_key in failed_recordings:
             failed_features = failed_recordings[vrs_key]
-            features_to_check = (
-                requested_features
-                if requested_features
-                else ["HAND_TRACKING", "SLAM", "EYE_GAZE"]
-            )
-            # If all requested features are in the failed list, skip this recording
-            if all(f in failed_features for f in features_to_check):
-                logger.info(
-                    f"Skipping {Path(vrs_key).name}: all requested features in failed_recordings"
+            # Filter out features that have previously failed
+            features_to_process = [
+                f for f in features_needed_on_s3 if f not in failed_features
+            ]
+            skipped_features = [
+                f for f in features_needed_on_s3 if f in failed_features
+            ]
+            if skipped_features:
+                logger.debug(
+                    f"{filename}: needs {features_needed_on_s3} on S3, "
+                    f"but skipping {skipped_features} (previously failed), "
+                    f"will process {features_to_process}"
                 )
-                return None
+        else:
+            # Recording not in failed_recordings (either not processed before,
+            # or all features were OK). Process all features that S3 needs.
+            logger.debug(
+                f"{filename}: needs {features_needed_on_s3} on S3, "
+                f"not in failed_recordings or all previously OK"
+            )
 
-        mps_key = get_mps_key_from_vrs_key(vrs_key)
-        if get_features_needed_s3(backend, mps_key, requested_features):
+        if features_to_process:
+            logger.debug(
+                f"{filename}: needs processing for features {features_to_process}"
+            )
             return vrs_key
-        return None
+        else:
+            logger.debug(f"{filename}: all needed features previously failed, skipping")
+            return None
 
     files_needing_work = []
 
@@ -911,7 +961,7 @@ def process_batch_no_download(
                 f"[Batch {batch_num}] aria_mps returned non-zero exit code: {result.returncode}"
             )
             logger.info(
-                f"[Batch {batch_num}] Check {batch_dir}/aria_mps.log for details"
+                f"[Batch {batch_num}] Check {batch_dir}/aria_mps_pass1.log and aria_mps_pass2.log for details"
             )
 
         # Upload results
@@ -920,10 +970,17 @@ def process_batch_no_download(
 
         # Validate results and report failed recordings
         logger.info(f"[Batch {batch_num}] Validating MPS output...")
-        failed_recordings_list = validate_batch_results(vrs_keys, backend, features)
+        failed_recordings_list, passed_recordings_list = validate_batch_results(
+            vrs_keys, backend, features
+        )
+
+        # Write both failed and passed recordings to update status
+        all_recordings = failed_recordings_list + passed_recordings_list
+        if all_recordings:
+            report_path = batch_dir.parent / "recordings_status.json"
+            write_recordings_status_report(all_recordings, report_path)
+
         if failed_recordings_list:
-            report_path = batch_dir.parent / "failed_recordings.json"
-            write_failed_recordings_report(failed_recordings_list, report_path)
             logger.warning(
                 f"[Batch {batch_num}] {len(failed_recordings_list)} recording(s) "
                 f"have incomplete MPS output"
@@ -933,16 +990,22 @@ def process_batch_no_download(
                     f"  - {Path(rec.vrs_key).name}: {', '.join(rec.failed_features)}"
                 )
 
-        # Upload failed_recordings.json to S3 after each batch
-        report_path = batch_dir.parent / "failed_recordings.json"
+        if passed_recordings_list:
+            logger.info(
+                f"[Batch {batch_num}] {len(passed_recordings_list)} recording(s) "
+                f"completed successfully"
+            )
+
+        # Upload recordings_status.json to S3 after each batch
+        report_path = batch_dir.parent / "recordings_status.json"
         if report_path.exists():
             s3_report_key = (
-                f"{s3_prefix.rstrip('/')}/failed_recordings.json"
+                f"{s3_prefix.rstrip('/')}/recordings_status.json"
                 if s3_prefix
-                else "failed_recordings.json"
+                else "recordings_status.json"
             )
             logger.info(
-                f"[Batch {batch_num}] Uploading failed_recordings.json to s3://{backend.bucket}/{s3_report_key}"
+                f"[Batch {batch_num}] Uploading recordings_status.json to s3://{backend.bucket}/{s3_report_key}"
             )
             try:
                 backend.client.upload_file(
@@ -950,7 +1013,7 @@ def process_batch_no_download(
                 )
             except Exception as upload_err:
                 logger.warning(
-                    f"[Batch {batch_num}] Failed to upload failed_recordings.json: {upload_err}"
+                    f"[Batch {batch_num}] Failed to upload recordings_status.json: {upload_err}"
                 )
 
         logger.info(f"[Batch {batch_num}] Complete.")
@@ -991,33 +1054,38 @@ def validate_batch_results(
     vrs_keys: List[str],
     backend: Boto3Backend,
     requested_features: Optional[List[str]] = None,
-) -> List[RecordingStatus]:
+) -> Tuple[List[RecordingStatus], List[RecordingStatus]]:
     """Validate MPS results for a batch after upload.
 
-    Checks each recording's MPS output on S3 and returns status for
-    recordings that are incomplete (have any non-OK features).
+    Checks each recording's MPS output on S3 and returns status for all recordings.
 
     Args:
         vrs_keys: List of VRS keys to validate
         backend: S3 backend for reading status files
         requested_features: List of features to validate. If None, validates all features.
+
+    Returns:
+        Tuple of (failed_recordings, passed_recordings)
     """
     failed_recordings = []
+    passed_recordings = []
 
     for vrs_key in vrs_keys:
         status = get_recording_status_s3(vrs_key, backend, requested_features)
-        if not status.is_complete:
+        if status.is_complete:
+            passed_recordings.append(status)
+        else:
             failed_recordings.append(status)
 
-    return failed_recordings
+    return failed_recordings, passed_recordings
 
 
-def write_failed_recordings_report(
-    failed_recordings: List[RecordingStatus],
+def write_recordings_status_report(
+    recordings: List[RecordingStatus],
     output_path: Path,
     append: bool = True,
 ) -> None:
-    """Write failed recordings report to a JSON file.
+    """Write recordings status report to a JSON file.
 
     The JSON structure uses vrs_key as the top-level key with features as sub-keys:
     {
@@ -1044,7 +1112,7 @@ def write_failed_recordings_report(
     """
     # Convert to new format: dict keyed by vrs_key
     new_entries: Dict[str, dict] = {}
-    for rec in failed_recordings:
+    for rec in recordings:
         entry = {
             "timestamp": datetime.now().isoformat(),
         }
@@ -1087,9 +1155,7 @@ def write_failed_recordings_report(
         json.dump(sorted_data, f, indent=2)
 
     if new_entries:
-        logger.warning(
-            f"Added/updated {len(new_entries)} failed recording(s) in {output_path}"
-        )
+        logger.info(f"Updated {len(new_entries)} recording(s) in {output_path}")
 
 
 # ============================================================================
@@ -1115,28 +1181,15 @@ def write_cli_log(
         f.write(f"=== STDERR ===\n{result.stderr}\n")
 
 
-def run_aria_mps(
+def _build_aria_mps_cmd(
     folder: Path,
     mps_user: Optional[str],
     mps_password: Optional[str],
     features: Optional[List[str]] = None,
     force: bool = False,
     retry_failed: bool = False,
-) -> subprocess.CompletedProcess:
-    """Run aria_mps on a folder with specified options.
-
-    Args:
-        folder: Path to the folder containing VRS files
-        mps_user: MPS username
-        mps_password: MPS password
-        features: List of features to process (e.g., ["HAND_TRACKING", "SLAM", "EYE_GAZE"]).
-                  If None, aria_mps will process all features.
-        force: If True, pass --force flag to aria_mps
-        retry_failed: If True, pass --retry-failed flag to aria_mps
-
-    Returns:
-        CompletedProcess with return code, stdout, and stderr
-    """
+) -> List[str]:
+    """Build aria_mps command with specified options."""
     cmd = [
         "aria_mps",
         "single",
@@ -1158,6 +1211,15 @@ def run_aria_mps(
     if mps_user and mps_password:
         cmd.extend(["-u", mps_user, "-p", mps_password])
 
+    return cmd
+
+
+def _run_aria_mps_cmd(
+    cmd: List[str],
+    log_file: Path,
+    mps_password: Optional[str],
+) -> subprocess.CompletedProcess:
+    """Execute aria_mps command and log output."""
     # Log command with password masked
     cmd_for_logging = " ".join(cmd)
     if mps_password:
@@ -1165,10 +1227,62 @@ def run_aria_mps(
     logger.info(f"   Running command: {cmd_for_logging}")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-
-    log_file = folder / "aria_mps.log"
     write_cli_log(log_file, cmd, result, mps_password)
     return result
+
+
+def run_aria_mps(
+    folder: Path,
+    mps_user: Optional[str],
+    mps_password: Optional[str],
+    features: Optional[List[str]] = None,
+    force: bool = False,
+    retry_failed: bool = False,
+) -> subprocess.CompletedProcess:
+    """Run aria_mps on a folder with specified options.
+
+    Always calls aria_mps twice:
+    1. First call: with --force and/or --retry-failed flags if specified, with --features
+    2. Second call: without --force and --retry-failed, but with --features if specified
+
+    This two-stage approach ensures:
+    - First pass handles force reprocessing or retry of failed items (if requested)
+    - Second pass processes any remaining features that weren't covered
+
+    Args:
+        folder: Path to the folder containing VRS files
+        mps_user: MPS username
+        mps_password: MPS password
+        features: List of features to process (e.g., ["HAND_TRACKING", "SLAM", "EYE_GAZE"]).
+                  If None, aria_mps will process all features.
+        force: If True, pass --force flag to aria_mps (first call only)
+        retry_failed: If True, pass --retry-failed flag to aria_mps (first call only)
+
+    Returns:
+        CompletedProcess from the second call
+    """
+    # First call: with --force and/or --retry-failed if specified
+    logger.info("   [Pass 1] Running with force/retry-failed flags (if any)...")
+    cmd1 = _build_aria_mps_cmd(
+        folder, mps_user, mps_password, features, force, retry_failed
+    )
+    log_file1 = folder / "aria_mps_pass1.log"
+    result1 = _run_aria_mps_cmd(cmd1, log_file1, mps_password)
+
+    if result1.returncode != 0:
+        logger.warning(
+            f"   [Pass 1] aria_mps returned non-zero exit code: {result1.returncode}"
+        )
+
+    # Second call: without --force and --retry-failed, but with --features if specified
+    logger.info("   [Pass 2] Running without force/retry-failed flags...")
+    cmd2 = _build_aria_mps_cmd(
+        folder, mps_user, mps_password, features, force=False, retry_failed=False
+    )
+    log_file2 = folder / "aria_mps_pass2.log"
+    result2 = _run_aria_mps_cmd(cmd2, log_file2, mps_password)
+
+    return result2
 
 
 # ============================================================================
@@ -1226,11 +1340,11 @@ Examples:
       --local-dir /local \\
       --include-failed-recordings
 
-  # Use custom failed_recordings.json path
+  # Use custom recordings_status.json path
   python s3_parallel_processor.py \\
       --bucket my-s3-bucket \\
       --local-dir /local \\
-      --failed-recordings-path custom/path/failed_recordings.json
+      --recordings-status-path custom/path/recordings_status.json
         """,
     )
     parser.add_argument(
@@ -1288,10 +1402,10 @@ Examples:
         help="Include recordings from failed_recordings.json (don't filter them out)",
     )
     parser.add_argument(
-        "--failed-recordings-path",
+        "--recordings-status-path",
         type=str,
         default=None,
-        help="Custom S3 path to failed_recordings.json (e.g., 'path/to/failed_recordings.json')",
+        help="Custom S3 path to recordings_status.json (e.g., 'path/to/recordings_status.json')",
     )
     args = parser.parse_args()
 
@@ -1321,32 +1435,32 @@ Examples:
     )
     logger.info(f"Features to process: {', '.join(features_display)}")
 
-    # Load failed recordings from S3 to exclude recordings with failed requested features
+    # Load recordings status from S3 to exclude recordings with failed requested features
     failed_recordings: Dict[str, Set[str]] = {}
     if args.include_failed_recordings:
         logger.info("Including failed recordings (--include-failed-recordings)")
     else:
-        failed_recordings_source = (
-            args.failed_recordings_path
-            if args.failed_recordings_path
+        recordings_status_source = (
+            args.recordings_status_path
+            if args.recordings_status_path
             else (
-                f"{args.s3_prefix.rstrip('/')}/failed_recordings.json"
+                f"{args.s3_prefix.rstrip('/')}/recordings_status.json"
                 if args.s3_prefix
-                else "failed_recordings.json"
+                else "recordings_status.json"
             )
         )
         logger.info(
-            f"Loading failed_recordings.json from S3: {failed_recordings_source}"
+            f"Loading recordings_status.json from S3: {recordings_status_source}"
         )
         failed_recordings = load_failed_recordings_from_s3(
-            backend, args.s3_prefix, failed_recordings_path=args.failed_recordings_path
+            backend, args.s3_prefix, recordings_status_path=args.recordings_status_path
         )
         if failed_recordings:
             logger.info(
-                f"Found {len(failed_recordings)} recording(s) in failed_recordings.json"
+                f"Found {len(failed_recordings)} recording(s) with failures in recordings_status.json"
             )
         else:
-            logger.info("No failed_recordings.json found or file is empty")
+            logger.info("No recordings_status.json found or file is empty")
 
     # Step 2: Filter to files needing processing (parallel)
     logger.info("Filtering files that need processing (parallel)...")
@@ -1388,7 +1502,7 @@ Examples:
             )
 
     with ThreadPoolExecutor(max_workers=1) as download_executor:
-        current_download_future: Optional[Future] = None
+        current_download_future = None
         current_batch_dir: Optional[Path] = None
 
         for i, batch in enumerate(batches_to_process, 1):

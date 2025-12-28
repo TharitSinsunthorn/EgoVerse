@@ -12,4 +12,6 @@ python3 /home/ubuntu/EgoVerse/egomimic/scripts/mps_process/s3_parallel_processor
 	--local-dir ~/local \
 	--target-size-gb 150 \
     --features HAND_TRACKING SLAM \
+    --retry-failed \
+    --include-failed-recordings
 

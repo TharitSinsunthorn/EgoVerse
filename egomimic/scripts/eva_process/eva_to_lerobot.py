@@ -1047,8 +1047,6 @@ class DatasetConverter:
                 align_corners=False,
             ).squeeze(0)  # (C,outH,outW)
 
-            # BGR -> RGB, then (H,W,C)
-            t_resized = t_resized[[2, 1, 0], ...]  # (3,H,W) RGB
             hwc = t_resized.permute(1, 2, 0).contiguous()  # (H,W,3), uint8
             rgb_frames.append(hwc)
 

@@ -16,7 +16,7 @@ idle_timeout_minutes: 10
 available_node_types:
   head_node:
     node_config:
-      InstanceType: c5.xlarge
+      InstanceType: t3a.2xlarge
       ImageId: ami-0b3766455f47e0ec4
       KeyName: ryan-mac # put your own ssh key here  
       SubnetId: subnet-02fbc81414d827515

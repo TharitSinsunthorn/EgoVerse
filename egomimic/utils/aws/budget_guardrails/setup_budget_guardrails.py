@@ -173,18 +173,83 @@ def _ensure_budget(budgets, account_id, budget_name, limit, topic_arn, service_f
     )
 
 
+def _delete_budget(budgets, account_id, budget_name):
+    try:
+        budgets.delete_budget(AccountId=account_id, BudgetName=budget_name)
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] not in {"NotFoundException", "ResourceNotFoundException"}:
+            raise
+
+
+def _find_sns_topic_arn(sns, topic_name):
+    token = None
+    while True:
+        resp = sns.list_topics(NextToken=token) if token else sns.list_topics()
+        for topic in resp.get("Topics", []):
+            arn = topic.get("TopicArn", "")
+            if arn.endswith(f":{topic_name}"):
+                return arn
+        token = resp.get("NextToken")
+        if not token:
+            return None
+
+
+def _delete_sns_topic(sns, topic_name):
+    topic_arn = _find_sns_topic_arn(sns, topic_name)
+    if not topic_arn:
+        return None
+    sns.delete_topic(TopicArn=topic_arn)
+    return topic_arn
+
+
+def _delete_lambda(lambda_client, lambda_name):
+    try:
+        lambda_client.delete_function(FunctionName=lambda_name)
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "ResourceNotFoundException":
+            raise
+
+
+def _delete_role(iam, role_name):
+    try:
+        iam.delete_role_policy(RoleName=role_name, PolicyName="BudgetGuardrailsStopEc2")
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "NoSuchEntity":
+            raise
+
+    try:
+        iam.detach_role_policy(
+            RoleName=role_name,
+            PolicyArn="arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        )
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "NoSuchEntity":
+            raise
+
+    try:
+        iam.delete_role(RoleName=role_name)
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "NoSuchEntity":
+            raise
+
+
 # Run: python3 setup_budget_guardrails.py --emails skareer6@gatech.edu rpunamiya6@gatech.edu danfei@gatech.edu
 def main():
     parser = argparse.ArgumentParser(description="Set up EC2 daily budget guardrails.")
     parser.add_argument("--region", default="us-east-2", help="EC2 region to stop.")
     parser.add_argument("--daily-limit", type=float, default=150.0)
-    parser.add_argument("--emails", nargs="+", required=True)
+    parser.add_argument("--emails", nargs="+", default=[])
     parser.add_argument("--budget-name", default="ec2-daily-budget-guardrails")
     parser.add_argument("--topic-name", default="ec2-daily-budget-alerts")
     parser.add_argument("--lambda-name", default="stop-ec2-on-budget")
     parser.add_argument("--role-name", default="budget-guardrails-stop-ec2")
     parser.add_argument("--stop-tag-key", default="")
     parser.add_argument("--stop-tag-value", default="")
+    parser.add_argument(
+        "--remove",
+        action="store_true",
+        help="Delete budget guardrail resources instead of creating them.",
+    )
     parser.add_argument(
         "--service-filter",
         default="Amazon Elastic Compute Cloud - Compute",
@@ -196,6 +261,9 @@ def main():
     )
     args = parser.parse_args()
 
+    if not args.remove and not args.emails:
+        parser.error("--emails is required unless --remove is set.")
+
     sts = boto3.client("sts")
     account_id = sts.get_caller_identity()["Account"]
 
@@ -203,6 +271,17 @@ def main():
     lambda_client = boto3.client("lambda", region_name=args.region)
     sns = boto3.client("sns", region_name=args.region)
     budgets = boto3.client("budgets", region_name="us-east-1")
+
+    if args.remove:
+        _delete_budget(budgets, account_id, args.budget_name)
+        deleted_topic = _delete_sns_topic(sns, args.topic_name)
+        _delete_lambda(lambda_client, args.lambda_name)
+        _delete_role(iam, args.role_name)
+        print("Budget guardrails removed.")
+        print(f"Account: {account_id}")
+        print(f"Region: {args.region}")
+        print(f"SNS topic: {deleted_topic or 'not found'}")
+        return
 
     role_arn = _ensure_role(iam, args.role_name)
     zip_bytes = _zip_lambda_source(args.lambda_path)

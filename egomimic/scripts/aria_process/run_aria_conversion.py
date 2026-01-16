@@ -284,14 +284,15 @@ def launch(dry: bool = False, skip_if_done: bool = False):
         print(f"[INFO] processing {name}: episode_key={episode_key}", flush=True)
 
         arm = infer_arm_from_row(row)
-        dataset_name = f"{name}_processed"
+        dataset_name = episode_key
         out_dir = PROCESSED_ROOT
         description = row.task_description or ""
 
         if dry:
-            ds_path = (PROCESSED_ROOT / f"{name}_processed").resolve()
+            ds_path = (PROCESSED_ROOT / dataset_name).resolve()
             stem = vrs.stem
             mp4_candidate = PROCESSED_ROOT / f"{stem}_video.mp4"
+
 
             mapped_ds = _map_processed_local_to_remote(ds_path)
             mapped_mp4 = _map_processed_local_to_remote(mp4_candidate)

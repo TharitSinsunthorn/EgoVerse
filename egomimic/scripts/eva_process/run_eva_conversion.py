@@ -98,7 +98,7 @@ def _load_episode_key(name: str) -> str | None:
             "%Y-%m-%d-%H-%M-%S-%f"
         )
     except Exception:
-        return name
+        return None
 
 
 @ray.remote(num_cpus=12)
@@ -193,7 +193,7 @@ def launch(dry: bool = False, skip_if_done: bool = False):
             continue
 
         arm = infer_arm_from_robot_name(getattr(row, "robot_name", None))
-        dataset_name = f"{name}_processed"
+        dataset_name = episode_key
         out_dir = PROCESSED_ROOT
         description = row.task_description or ""
 

@@ -179,7 +179,7 @@ class PolicyRollout(Rollout):
         super().__init__()
         self.arm = arm
         self.policy_path = policy_path
-        self.policy = ModelWrapper.load_from_checkpoint(policy_path)
+        self.policy = ModelWrapper.load_from_checkpoint(policy_path, weights_only=False)
         self.query_frequency = query_frequency
         self.cartesian = cartesian
         self.embodiment_id = EMBODIMENT_MAP[self.arm]
@@ -332,7 +332,7 @@ class PolicyRollout(Rollout):
     def reset(self):
         self.actions = None
         self.debug_actions = None
-        self.policy = ModelWrapper.load_from_checkpoint(self.policy_path)
+        self.policy = ModelWrapper.load_from_checkpoint(self.policy_path, weights_only=False)
         if getattr(self.policy.model, "diffusion", False):
             for head in self.policy.model.nets.policy.heads:
                 if isinstance(self.policy.model.nets.policy.heads[head], DenoisingPolicy):

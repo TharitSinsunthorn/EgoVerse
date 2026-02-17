@@ -50,8 +50,9 @@ def create_default_engine():
         PASSWORD = cfg.get("password", cfg.get("PASSWORD"))
         PORT = cfg.get("port", 5432)
     else:
+        print("Using hardcoded DB Credentials (ok for local testing)")
         # Fallback to hardcoded values for local testing
-        HOST = "lowuse-pg-east2.claua8sacyu5.us-east-2.rds.amazonaws.com"
+        HOST = "lowuse-pg-east2.cdc8824mase4.us-east-2.rds.amazonaws.com"
         DBNAME = "appdb"
         USER = "appuser"
         PASSWORD = "APPUSER_STRONG_PW"
@@ -112,9 +113,7 @@ def update_episode(engine, episode: TableRow):
         .values(**row)
     )
 
-    with (
-        engine.begin() as conn
-    ):  # use engine.begin() for transactional context (SQLAlchemy 2 style)
+    with engine.begin() as conn:  # use engine.begin() for transactional context (SQLAlchemy 2 style)
         conn.execute(stmt)
     return True
 

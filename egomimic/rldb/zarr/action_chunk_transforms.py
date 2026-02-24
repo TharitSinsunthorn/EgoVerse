@@ -25,7 +25,7 @@ from egomimic.utils.pose_utils import (
     _matrix_to_xyzypr,
     _xyzwxyz_to_matrix,
 )
-
+from egomimic.utils.egomimicUtils import EXTRINSICS
 # ---------------------------------------------------------------------------
 # Base Transform
 # ---------------------------------------------------------------------------
@@ -436,12 +436,16 @@ def build_eva_bimanual_transform_list(
     obs_key: str = "observations.state.ee_pose",
     chunk_length: int = 100,
     stride: int = 1,
+    extrinsics_key: str = "x5Dec13_2",
     is_quat: bool = True,
-    left_extra_batch_key: dict | None = None,
-    right_extra_batch_key: dict | None = None,
 ) -> list[Transform]:
     """Canonical EVA bimanual transform pipeline used by tests and notebooks."""
-    transform_list: list[Transform] = [
+    extrinsics = EXTRINSICS[extrinsics_key]
+    left_extrinsics_pose = _matrix_to_xyzwxyz(extrinsics["left"][None, :])[0]
+    right_extrinsics_pose = _matrix_to_xyzwxyz(extrinsics["right"][None, :])[0]
+    left_extra_batch_key = {"left_extrinsics_pose": left_extrinsics_pose}
+    right_extra_batch_key = {"right_extrinsics_pose": right_extrinsics_pose}
+    transform_list = [
         ActionChunkCoordinateFrameTransform(
             target_world=left_target_world,
             chunk_world=left_cmd_world,
@@ -495,6 +499,7 @@ def build_eva_bimanual_transform_list(
             stride=stride,
         ),
     ]
+
     if is_quat:
         transform_list.append(
             XYZWXYZ_to_XYZYPR(

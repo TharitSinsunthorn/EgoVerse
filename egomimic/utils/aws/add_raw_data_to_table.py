@@ -36,6 +36,7 @@ class rawHdf5Episode:
     hdf5_path: cloudpathlib.S3Path
     metadata_json_path: cloudpathlib.S3Path
 
+
 def filter_raw_episodes(
     all_files: list[rawAriaEpisode | rawHdf5Episode], current_episodes: set[str]
 ):
@@ -63,7 +64,10 @@ def _get_raw_aria_episodes(all_files, all_file_uris, s3_client):
                 metadata_json_uri, client=s3_client
             )
 
-            if vrs_json_uri not in all_file_uris or metadata_json_uri not in all_file_uris:
+            if (
+                vrs_json_uri not in all_file_uris
+                or metadata_json_uri not in all_file_uris
+            ):
                 print(
                     f"Skipping {file} because it doesn't have a vrs json or metadata json"
                 )

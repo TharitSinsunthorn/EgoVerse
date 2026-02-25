@@ -56,9 +56,7 @@ class _IncrementalHandle:
         if self._total_frames is not None:
             self._writer.total_frames = self._total_frames
         self._writer.episode_path.parent.mkdir(parents=True, exist_ok=True)
-        self._store = zarr.open(
-            str(self._writer.episode_path), mode="w", zarr_format=3
-        )
+        self._store = zarr.open(str(self._writer.episode_path), mode="w", zarr_format=3)
         return self
 
     def _init_arrays(
@@ -227,7 +225,7 @@ class _IncrementalHandle:
         self._ensure_capacity(end)
 
         for key, arr in numeric.items():
-            self._store[key][self._cursor:end] = arr
+            self._store[key][self._cursor : end] = arr
 
         for key, img_batch in images.items():
             encoded = np.empty((batch_size,), dtype=object)
@@ -235,7 +233,7 @@ class _IncrementalHandle:
                 encoded[i] = simplejpeg.encode_jpeg(
                     img_batch[i], quality=ZarrWriter.JPEG_QUALITY, colorspace="RGB"
                 )
-            self._store[key][self._cursor:end] = encoded
+            self._store[key][self._cursor : end] = encoded
 
         self._cursor += batch_size
 
@@ -272,9 +270,7 @@ class _IncrementalHandle:
 
         # Write language annotations
         if self._writer.annotations is not None:
-            self._writer._write_annotations(
-                self._store, self._writer.annotations
-            )
+            self._writer._write_annotations(self._store, self._writer.annotations)
 
         # Write metadata
         metadata = self._writer._build_metadata(self._metadata_override)
@@ -369,7 +365,9 @@ class ZarrWriter:
         # Calculate padded frame count if sharding is enabled
         padded_frames = self.total_frames
         if self.enable_sharding and self.total_frames % self.chunk_timesteps != 0:
-            padded_frames = ((self.total_frames + self.chunk_timesteps - 1) // self.chunk_timesteps) * self.chunk_timesteps
+            padded_frames = (
+                (self.total_frames + self.chunk_timesteps - 1) // self.chunk_timesteps
+            ) * self.chunk_timesteps
 
         # Create parent directory
         self.episode_path.parent.mkdir(parents=True, exist_ok=True)
@@ -425,7 +423,9 @@ class ZarrWriter:
         """
         return _IncrementalHandle(self, total_frames, metadata_override)
 
-    def _write_numeric_array(self, store: zarr.Group, key: str, arr: np.ndarray, padded_frames: int) -> None:
+    def _write_numeric_array(
+        self, store: zarr.Group, key: str, arr: np.ndarray, padded_frames: int
+    ) -> None:
         """
         Write a numeric array to the Zarr store.
 
@@ -478,7 +478,9 @@ class ZarrWriter:
             "names": dimension_names,
         }
 
-    def _write_image_array(self, store: zarr.Group, key: str, image_arr: np.ndarray, padded_frames: int) -> None:
+    def _write_image_array(
+        self, store: zarr.Group, key: str, image_arr: np.ndarray, padded_frames: int
+    ) -> None:
         """
         Write an image array to the Zarr store with JPEG compression.
 
@@ -506,7 +508,9 @@ class ZarrWriter:
             # Use last frame for padding
             frame_idx = min(i, num_frames - 1)
             img = image_arr[frame_idx]
-            jpeg_bytes = simplejpeg.encode_jpeg(img, quality=self.JPEG_QUALITY, colorspace='RGB')
+            jpeg_bytes = simplejpeg.encode_jpeg(
+                img, quality=self.JPEG_QUALITY, colorspace="RGB"
+            )
             encoded[i] = jpeg_bytes
 
         # Images are always chunked 1 per timestep, regardless of chunk_timesteps
@@ -553,7 +557,11 @@ class ZarrWriter:
         encoded = np.array(
             [
                 json.dumps(
-                    {"text": text, "start_idx": int(start_idx), "end_idx": int(end_idx)},
+                    {
+                        "text": text,
+                        "start_idx": int(start_idx),
+                        "end_idx": int(end_idx),
+                    },
                     ensure_ascii=False,
                     separators=(",", ":"),
                 ).encode("utf-8")
@@ -591,7 +599,9 @@ class ZarrWriter:
             "format": "annotation_v1",
         }
 
-    def _build_metadata(self, metadata_override: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _build_metadata(
+        self, metadata_override: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Build episode metadata dictionary.
 

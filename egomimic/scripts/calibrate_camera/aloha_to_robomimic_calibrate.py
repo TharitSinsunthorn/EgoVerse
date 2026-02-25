@@ -60,6 +60,7 @@ def get_future_points(arr, POINT_GAP=15, FUTURE_POINTS_COUNT=10):
 
     return result
 
+
 def is_valid_path(path):
     if os.path.isdir(path):
         return False
@@ -166,7 +167,9 @@ if __name__ == "__main__":
                 #     ).get_matrix()
                 # )
                 # fk_positions = torch.cat([fk_pos, fk_rot], dim=1)
-                fk_positions = aloha_hdf5["observations"]["eepose"][:, joint_start:joint_end]
+                fk_positions = aloha_hdf5["observations"]["eepose"][
+                    :, joint_start:joint_end
+                ]
 
                 demo_i_obs_group.create_dataset(
                     "ee_pose_robot_frame", data=fk_positions

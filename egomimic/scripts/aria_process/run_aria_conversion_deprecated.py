@@ -90,7 +90,6 @@ def append_status(row: dict):
             existing_fieldnames = set()
             rows = []
 
-        new_fields = set(row.keys()) - existing_fieldnames
         all_fields = list(existing_fieldnames.union(row.keys()))
 
         rows.append(row)

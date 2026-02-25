@@ -101,11 +101,9 @@ def decode_video(compressed_data, metadata):
     """
     metadata = json.loads(metadata)
     method = metadata["method"]
-    shape = metadata["shape"]
 
     if method == "JPEG":
         lengths = metadata["lengths"]
-        quality = metadata.get("quality", 85)
 
         frames = []
         offset = 0
@@ -118,8 +116,6 @@ def decode_video(compressed_data, metadata):
         return np.stack(frames)
 
     elif method == "H265":
-        fps = metadata["fps"]
-
         container = av.open(io.BytesIO(compressed_data))
         stream = container.streams.video[0]
 

@@ -60,7 +60,7 @@ for filename in images:
     # If desired number of corners can be detected then,
     # refine the pixel coordinates and display
     # them on the images of checker board
-    if ret == True:
+    if ret:
         threedpoints.append(objectp3d)
 
         # Refining pixel coordinates

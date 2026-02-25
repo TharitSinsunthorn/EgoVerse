@@ -165,7 +165,7 @@ class MinkKinematicsSolver:
         # Load MuJoCo model
         try:
             self.model = mujoco.MjModel.from_xml_path(self.model_path)
-        except:
+        except Exception:
             # If direct loading fails, try creating a scene XML
             self.model = self._create_mujoco_model_from_urdf(model_path)
 
@@ -302,7 +302,7 @@ class MinkKinematicsSolver:
         if best_solution is not None:
             return best_solution
         return self.configuration.q[self.dof_ids]
-    
+
     def fk_single_pos_rot(self, jnts):
         """
         Forward Kinematics using MuJoCo.
@@ -344,7 +344,7 @@ class MinkKinematicsSolver:
         pos, rot = self.fk_single_pos_rot(jnts[:6])
         ypr = rot.as_euler("ZYX", degrees=False)
         return np.concatenate([pos, ypr], axis=0)
-    
+
     def fk_pos(self, jnts):
         """
         Forward Kinematics for position only.
@@ -352,10 +352,13 @@ class MinkKinematicsSolver:
         if jnts.ndim == 1:
             return self.fk_single_pos_rot(jnts)[0]
         elif jnts.ndim == 2:
-            return np.stack([self.fk_single_pos_rot(jnts[i])[0] for i in range(jnts.shape[0])], axis=0)
+            return np.stack(
+                [self.fk_single_pos_rot(jnts[i])[0] for i in range(jnts.shape[0])],
+                axis=0,
+            )
         else:
             raise ValueError(f"Unknown joint shape: {jnts.shape}")
-    
+
     def fk(self, jnts):
         """
         Same format as aloha_fk.fk(qpos)
@@ -369,9 +372,15 @@ class MinkKinematicsSolver:
                 raise ValueError(f"Unknown joint shape: {jnts.shape}")
         elif jnts.ndim == 2:
             if jnts.shape[-1] == 6:
-                return np.stack([self.fk_single_pos_rot(jnts[i]) for i in range(jnts.shape[0])], axis=0)
+                return np.stack(
+                    [self.fk_single_pos_rot(jnts[i]) for i in range(jnts.shape[0])],
+                    axis=0,
+                )
             elif jnts.shape[-1] == 7:
-                return np.stack([self.fk_single_pos_rot(jnts[i]) for i in range(jnts.shape[0])], axis=0)
+                return np.stack(
+                    [self.fk_single_pos_rot(jnts[i]) for i in range(jnts.shape[0])],
+                    axis=0,
+                )
             else:
                 raise ValueError(f"Unknown joint shape: {jnts.shape}")
         else:

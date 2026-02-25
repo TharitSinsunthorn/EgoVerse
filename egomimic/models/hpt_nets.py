@@ -493,7 +493,7 @@ class STPolicyStem(nn.Module):
             horizon, instance (e.g. num of views), number of features, and feature dimensions respectively.
             Average over the number of instances.
         """
-        B, T, I, *_ = x.shape
+        B, T, num_instances, *_ = x.shape
         x = rearrange(x, "B T I ... D -> (B I) D T ...")
 
         if self.conv_dim == 3:
@@ -506,7 +506,9 @@ class STPolicyStem(nn.Module):
             )
         out = self.conv(x)
         out = self.pool(out)
-        out = rearrange(out, "(B I) D ... -> B I (...) D", B=B, I=I).mean(dim=1)
+        out = rearrange(out, "(B I) D ... -> B I (...) D", B=B, I=num_instances).mean(
+            dim=1
+        )
         return out
 
 

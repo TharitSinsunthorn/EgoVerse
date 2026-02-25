@@ -505,40 +505,45 @@ def build_eva_bimanual_transform_list(
     if is_quat:
         transform_list.append(
             XYZWXYZ_to_XYZYPR(
-                keys=[left_cmd_camframe, right_cmd_camframe, left_obs_pose, right_obs_pose]
+                keys=[
+                    left_cmd_camframe,
+                    right_cmd_camframe,
+                    left_obs_pose,
+                    right_obs_pose,
+                ]
             )
         )
 
     transform_list.extend(
         [
-        ConcatKeys(
-            key_list=[
-                left_cmd_camframe,
-                left_gripper,
-                right_cmd_camframe,
-                right_gripper,
-            ],
-            new_key_name=actions_key,
-            delete_old_keys=True,
-        ),
-        ConcatKeys(
-            key_list=[
-                left_obs_pose,
-                left_obs_gripper,
-                right_obs_pose,
-                right_obs_gripper,
-            ],
-            new_key_name=obs_key,
-            delete_old_keys=True,
-        ),
-        DeleteKeys(
-            keys_to_delete=[
-                left_cmd_world,
-                right_cmd_world,
-                left_target_world,
-                right_target_world,
-            ]
-        ),
+            ConcatKeys(
+                key_list=[
+                    left_cmd_camframe,
+                    left_gripper,
+                    right_cmd_camframe,
+                    right_gripper,
+                ],
+                new_key_name=actions_key,
+                delete_old_keys=True,
+            ),
+            ConcatKeys(
+                key_list=[
+                    left_obs_pose,
+                    left_obs_gripper,
+                    right_obs_pose,
+                    right_obs_gripper,
+                ],
+                new_key_name=obs_key,
+                delete_old_keys=True,
+            ),
+            DeleteKeys(
+                keys_to_delete=[
+                    left_cmd_world,
+                    right_cmd_world,
+                    left_target_world,
+                    right_target_world,
+                ]
+            ),
         ]
     )
     return transform_list

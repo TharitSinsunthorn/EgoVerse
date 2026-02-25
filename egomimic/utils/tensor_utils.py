@@ -3,9 +3,7 @@ A collection of utilities for working with nested tensor structures consisting
 of numpy arrays and torch tensors.
 """
 
-"""
-from robomimic
-"""
+# from robomimic
 import collections
 
 import numpy as np

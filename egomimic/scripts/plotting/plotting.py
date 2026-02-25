@@ -6,10 +6,54 @@ import pandas as pd
 
 
 class ColorsPalette:
-    PACBLUE = ["#eff5f7", "#cfe1e5", "#b7d3d8", "#96bfc7", "#82b2bc", "#639fab", "#5a919c", "#467179", "#36575e", "#2a4348"]
-    WILLOWGREEN = ["#f4faf3", "#dcf0db", "#cbe9c9", "#b3e0b1", "#a5d9a1", "#8ed08a", "#81bd7e", "#659462", "#4e724c", "#3c573a"]
-    TIGERFLAME = ["#fdf0eb", "#f9cfc0", "#f6b8a2", "#f29877", "#ef845d", "#eb6534", "#d65c2f", "#a74825", "#81381d", "#632a16"]
-    LILAC = ["#f6f4f7", "#e4dee7", "#d7cedc", "#c5b7cc", "#baa9c2", "#a994b3", "#9a87a3", "#78697f", "#5d5162", "#473e4b"]
+    PACBLUE = [
+        "#eff5f7",
+        "#cfe1e5",
+        "#b7d3d8",
+        "#96bfc7",
+        "#82b2bc",
+        "#639fab",
+        "#5a919c",
+        "#467179",
+        "#36575e",
+        "#2a4348",
+    ]
+    WILLOWGREEN = [
+        "#f4faf3",
+        "#dcf0db",
+        "#cbe9c9",
+        "#b3e0b1",
+        "#a5d9a1",
+        "#8ed08a",
+        "#81bd7e",
+        "#659462",
+        "#4e724c",
+        "#3c573a",
+    ]
+    TIGERFLAME = [
+        "#fdf0eb",
+        "#f9cfc0",
+        "#f6b8a2",
+        "#f29877",
+        "#ef845d",
+        "#eb6534",
+        "#d65c2f",
+        "#a74825",
+        "#81381d",
+        "#632a16",
+    ]
+    LILAC = [
+        "#f6f4f7",
+        "#e4dee7",
+        "#d7cedc",
+        "#c5b7cc",
+        "#baa9c2",
+        "#a994b3",
+        "#9a87a3",
+        "#78697f",
+        "#5d5162",
+        "#473e4b",
+    ]
 
 
 def _set_monospace_style():
@@ -29,7 +73,9 @@ def _resolve_group_positions(group_x_spacing, num_groups):
 
 def _parse_groups(groups):
     if not groups:
-        raise ValueError("groups must be a non-empty dict of {group_name: (values, error_bars, colors)}")
+        raise ValueError(
+            "groups must be a non-empty dict of {group_name: (values, error_bars, colors)}"
+        )
     group_names = list(groups.keys())
     parsed_groups = {}
     group_means = {}
@@ -51,7 +97,9 @@ def _resolve_bar_labels(bar_labels, max_bars):
     if bar_labels is None:
         bar_labels = [f"Bar {i + 1}" for i in range(max_bars)]
     if len(bar_labels) != max_bars:
-        raise ValueError("bar_labels must have the same length as the number of bars per group")
+        raise ValueError(
+            "bar_labels must have the same length as the number of bars per group"
+        )
     return bar_labels
 
 
@@ -66,7 +114,10 @@ def _compute_layout(group_positions, max_bars, group_width_scale=0.6):
     bar_width = base_group_width / max_bars
     bar_gap = bar_width * 0.2
     group_width = bar_width * max_bars + bar_gap * (max_bars - 1)
-    offsets = [(-group_width / 2 + bar_width / 2) + i * (bar_width + bar_gap) for i in range(max_bars)]
+    offsets = [
+        (-group_width / 2 + bar_width / 2) + i * (bar_width + bar_gap)
+        for i in range(max_bars)
+    ]
     return bar_width, group_width, offsets
 
 
@@ -111,9 +162,13 @@ def _wrap_label(label, width):
     label_str = str(label)
     if width is None or width <= 0:
         return label_str
-    wrapped = textwrap.wrap(label_str, width=width, break_long_words=False, break_on_hyphens=False)
+    wrapped = textwrap.wrap(
+        label_str, width=width, break_long_words=False, break_on_hyphens=False
+    )
     if len(wrapped) == 1 and len(label_str) > width:
-        wrapped = textwrap.wrap(label_str, width=width, break_long_words=True, break_on_hyphens=False)
+        wrapped = textwrap.wrap(
+            label_str, width=width, break_long_words=True, break_on_hyphens=False
+        )
     return "\n".join(wrapped) if wrapped else label_str
 
 
@@ -133,7 +188,14 @@ def plot_multi_line_chart(lines, x_label, y_label, title):
     for line_name, (x_vals, y_vals, color, sem) in lines.items():
         ax.plot(x_vals, y_vals, label=line_name, color=color, marker="o", markersize=4)
         if sem is not None:
-            ax.fill_between(x_vals, [y - s for y, s in zip(y_vals, sem)], [y + s for y, s in zip(y_vals, sem)], color=color, alpha=0.2, linewidth=0)
+            ax.fill_between(
+                x_vals,
+                [y - s for y, s in zip(y_vals, sem)],
+                [y + s for y, s in zip(y_vals, sem)],
+                color=color,
+                alpha=0.2,
+                linewidth=0,
+            )
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
     ax.set_title(title)
@@ -142,7 +204,6 @@ def plot_multi_line_chart(lines, x_label, y_label, title):
     ax.legend()
     ax.grid(True, axis="y", alpha=0.3)
     return fig, ax
-
 
 
 def plot_bar_chart(
@@ -175,7 +236,9 @@ def plot_bar_chart(
                 group_means[group_name] = sum(values) / len(values) if values else 0.0
     group_positions = _resolve_group_positions(group_x_spacing, len(group_names))
     bar_labels = _resolve_bar_labels(bar_labels, max_bars)
-    bar_width, group_width, offsets = _compute_layout(group_positions, max_bars, group_width_scale=group_width_scale)
+    bar_width, group_width, offsets = _compute_layout(
+        group_positions, max_bars, group_width_scale=group_width_scale
+    )
     fig, ax = plt.subplots(figsize=figsize)
     ax.set_axisbelow(True)
 
@@ -199,7 +262,9 @@ def plot_bar_chart(
             )
 
         if group_name in group_means:
-            _draw_group_mean(ax, group_positions[group_index], group_width, group_means[group_name])
+            _draw_group_mean(
+                ax, group_positions[group_index], group_width, group_means[group_name]
+            )
 
     ax.set_xticks(group_positions)
     wrap_width = max(10, int(figsize[0] * 1.4))
@@ -264,11 +329,15 @@ def plot_specified_bars(
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df[score_cols] = df[score_cols].fillna(0)
     df[normalization_col] = df[normalization_col].fillna(1.0).replace(0, 1.0)
-    df[aggregate_col] = df[score_cols].sum(axis=1) / df[normalization_col] / len(score_cols)
+    df[aggregate_col] = (
+        df[score_cols].sum(axis=1) / df[normalization_col] / len(score_cols)
+    )
 
     df_task = df[df[task_col] == task].copy()
     if include_remaining:
-        remaining_order = [h for h in df_task[human_hours_col].tolist() if h not in bar_order]
+        remaining_order = [
+            h for h in df_task[human_hours_col].tolist() if h not in bar_order
+        ]
         bar_order = list(bar_order) + remaining_order
     else:
         bar_order = list(bar_order)
@@ -357,14 +426,32 @@ def print_flagship_latex_table(
         robot_nos = "Robot-Only (New Object + Scene)"
         cotrain_no = "Co-train (New Object)"
         cotrain_nos = "Co-train (New Object + Scene)"
-        if robot_ood not in df.columns and robot_no in df.columns and robot_nos in df.columns:
-            df[robot_ood] = (pd.to_numeric(df[robot_no], errors="coerce") + pd.to_numeric(df[robot_nos], errors="coerce")) / 2.0
-        if cotrain_ood not in df.columns and cotrain_no in df.columns and cotrain_nos in df.columns:
-            df[cotrain_ood] = (pd.to_numeric(df[cotrain_no], errors="coerce") + pd.to_numeric(df[cotrain_nos], errors="coerce")) / 2.0
+        if (
+            robot_ood not in df.columns
+            and robot_no in df.columns
+            and robot_nos in df.columns
+        ):
+            df[robot_ood] = (
+                pd.to_numeric(df[robot_no], errors="coerce")
+                + pd.to_numeric(df[robot_nos], errors="coerce")
+            ) / 2.0
+        if (
+            cotrain_ood not in df.columns
+            and cotrain_no in df.columns
+            and cotrain_nos in df.columns
+        ):
+            df[cotrain_ood] = (
+                pd.to_numeric(df[cotrain_no], errors="coerce")
+                + pd.to_numeric(df[cotrain_nos], errors="coerce")
+            ) / 2.0
 
     if metrics is None:
         metrics = ["Robot-Only (ID)", "Co-train (ID)"]
-        if include_ood and "Robot-Only (OOD)" in df.columns and "Co-train (OOD)" in df.columns:
+        if (
+            include_ood
+            and "Robot-Only (OOD)" in df.columns
+            and "Co-train (OOD)" in df.columns
+        ):
             metrics.extend(["Robot-Only (OOD)", "Co-train (OOD)"])
 
     missing_metrics = [col for col in metrics if col not in df.columns]
@@ -383,12 +470,18 @@ def print_flagship_latex_table(
         df = df[df[task_col].isin(tasks)].copy()
         df[task_col] = pd.Categorical(df[task_col], categories=tasks, ordered=True)
 
-    df = df[[team_col, task_col] + metrics].sort_values([team_col, task_col], kind="stable")
+    df = df[[team_col, task_col] + metrics].sort_values(
+        [team_col, task_col], kind="stable"
+    )
 
     formatted = df[[team_col, task_col]].copy()
-    formatted[task_col] = formatted[task_col].astype(str).str.replace("_", " ", regex=False)
+    formatted[task_col] = (
+        formatted[task_col].astype(str).str.replace("_", " ", regex=False)
+    )
     for col in metrics:
-        formatted[col] = df[col].apply(_format_flagship_value, decimals=decimals, as_percent=as_percent)
+        formatted[col] = df[col].apply(
+            _format_flagship_value, decimals=decimals, as_percent=as_percent
+        )
 
     if bold_best:
         metric_pairs = []
@@ -402,17 +495,27 @@ def print_flagship_latex_table(
                 right_val = df.at[row_idx, right_col]
                 if pd.isna(left_val) and pd.isna(right_val):
                     continue
-                if pd.isna(right_val) or (not pd.isna(left_val) and left_val > right_val):
+                if pd.isna(right_val) or (
+                    not pd.isna(left_val) and left_val > right_val
+                ):
                     if formatted.at[row_idx, left_col] != "--":
-                        formatted.at[row_idx, left_col] = f"\\textbf{{{formatted.at[row_idx, left_col]}}}"
+                        formatted.at[row_idx, left_col] = (
+                            f"\\textbf{{{formatted.at[row_idx, left_col]}}}"
+                        )
                 elif pd.isna(left_val) or right_val > left_val:
                     if formatted.at[row_idx, right_col] != "--":
-                        formatted.at[row_idx, right_col] = f"\\textbf{{{formatted.at[row_idx, right_col]}}}"
+                        formatted.at[row_idx, right_col] = (
+                            f"\\textbf{{{formatted.at[row_idx, right_col]}}}"
+                        )
                 else:
                     if formatted.at[row_idx, left_col] != "--":
-                        formatted.at[row_idx, left_col] = f"\\textbf{{{formatted.at[row_idx, left_col]}}}"
+                        formatted.at[row_idx, left_col] = (
+                            f"\\textbf{{{formatted.at[row_idx, left_col]}}}"
+                        )
                     if formatted.at[row_idx, right_col] != "--":
-                        formatted.at[row_idx, right_col] = f"\\textbf{{{formatted.at[row_idx, right_col]}}}"
+                        formatted.at[row_idx, right_col] = (
+                            f"\\textbf{{{formatted.at[row_idx, right_col]}}}"
+                        )
 
     to_latex_kwargs = {
         "index": False,

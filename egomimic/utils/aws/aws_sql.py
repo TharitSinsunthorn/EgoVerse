@@ -117,7 +117,9 @@ def update_episode(engine, episode: TableRow):
         .values(**row)
     )
 
-    with engine.begin() as conn:  # use engine.begin() for transactional context (SQLAlchemy 2 style)
+    with (
+        engine.begin() as conn
+    ):  # use engine.begin() for transactional context (SQLAlchemy 2 style)
         conn.execute(stmt)
     return True
 
@@ -168,6 +170,7 @@ def episode_table_to_df(engine):
         else:
             print("No rows found in table 'episodes'.")
             return df
+
 
 def episode_hash_to_timestamp_ms(timestamp_str):
     """

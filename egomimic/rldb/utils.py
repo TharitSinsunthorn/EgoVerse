@@ -2,7 +2,11 @@ import ast
 import logging
 import os
 import random
+import subprocess
+import tempfile
+import traceback
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum
 from pathlib import Path
 
@@ -11,33 +15,14 @@ import huggingface_hub
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from datasets import concatenate_datasets
 from datasets import config as ds_cfg
+from datasets.utils.logging import disable_progress_bar
 from lerobot.common.datasets.lerobot_dataset import (
     LeRobotDataset,
     LeRobotDatasetMetadata,
 )
-
-from egomimic.utils.aws.aws_sql import (
-    create_default_engine,
-    episode_table_to_df,
-)
-
-logger = logging.getLogger(__name__)
-
-from datasets.utils.logging import disable_progress_bar
-
-disable_progress_bar()
-logging.getLogger("datasets").setLevel(logging.ERROR)
-
-logging.getLogger("huggingface_hub._snapshot_download").setLevel(logging.ERROR)
-
-import subprocess
-import tempfile
-import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-import torch.nn.functional as F
 from tqdm import tqdm
 
 from egomimic.rldb.data_utils import (
@@ -45,6 +30,17 @@ from egomimic.rldb.data_utils import (
     _slow_down_slerp_quat,
     _ypr_to_quat,
 )
+from egomimic.utils.aws.aws_sql import (
+    create_default_engine,
+    episode_table_to_df,
+)
+
+logger = logging.getLogger(__name__)
+
+disable_progress_bar()
+logging.getLogger("datasets").setLevel(logging.ERROR)
+
+logging.getLogger("huggingface_hub._snapshot_download").setLevel(logging.ERROR)
 
 
 class EMBODIMENT(Enum):
@@ -328,8 +324,6 @@ class RLDBDataset(LeRobotDataset):
 
         return frame_item
 
-
-
     def _get_frame_annotation(
         self,
         episode_idx: int,
@@ -369,7 +363,6 @@ class RLDBDataset(LeRobotDataset):
             return df_episode.iloc[prev_pos]["Labels"]
 
         return ""
-
 
     def _slow_down_sequence(self, seq, rot_spec=None):
         """
@@ -704,7 +697,7 @@ class S3RLDBDataset(MultiRLDBDataset):
         valid_collection_names = set()
         for _, hashes in filtered_paths:
             valid_collection_names.add(hashes)
-        
+
         max_workers = int(os.environ.get("RLDB_LOAD_WORKERS", "10"))
 
         datasets, skipped = self._load_rldb_datasets_parallel(
@@ -852,7 +845,8 @@ class S3RLDBDataset(MultiRLDBDataset):
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             futures = [
                 ex.submit(cls._load_rldb_dataset_one, **_submit_arg(p))
-                for p in all_paths if p.name in valid_collection_names
+                for p in all_paths
+                if p.name in valid_collection_names
             ]
 
             for fut in tqdm(
@@ -1303,7 +1297,9 @@ class DataSchematic(object):
             column_data = get_zarr_data(dataset, column_name)
 
             if column_data is None:
-                logger.warning(f"Skipping {column_name}, data not found given dataset type")
+                logger.warning(
+                    f"Skipping {column_name}, data not found given dataset type"
+                )
                 continue
 
             if column_data.ndim not in (2, 3):
@@ -1520,5 +1516,3 @@ class DataSchematic(object):
                 denorm_data[key] = tensor
 
         return denorm_data
-
-

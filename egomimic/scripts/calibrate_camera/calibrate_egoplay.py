@@ -1,7 +1,3 @@
-import os
-
-folder_path = os.path.join(os.path.dirname(__file__))
-
 import argparse
 
 import cv2
@@ -101,7 +97,6 @@ def main():
 
                 continue
 
-            bounding_box_corners = detect_result[0].corners
             # draw bounding box on img and save
             if args.debug:
                 img = april_detector.vis_tag(img)

@@ -11,6 +11,7 @@ import os
 import shutil
 from pathlib import Path
 
+import cv2
 import h5py
 import torch
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset

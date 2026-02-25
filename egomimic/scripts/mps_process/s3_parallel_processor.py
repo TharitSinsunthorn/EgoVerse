@@ -1443,8 +1443,7 @@ Examples:
         "--access-key-id",
         type=str,
         default=(
-            os.environ.get("R2_ACCESS_KEY_ID")
-            or os.environ.get("AWS_ACCESS_KEY_ID")
+            os.environ.get("R2_ACCESS_KEY_ID") or os.environ.get("AWS_ACCESS_KEY_ID")
         ),
         help="Optional S3 access key ID. Defaults to R2_ACCESS_KEY_ID/AWS_ACCESS_KEY_ID.",
     )
@@ -1461,8 +1460,7 @@ Examples:
         "--session-token",
         type=str,
         default=(
-            os.environ.get("R2_SESSION_TOKEN")
-            or os.environ.get("AWS_SESSION_TOKEN")
+            os.environ.get("R2_SESSION_TOKEN") or os.environ.get("AWS_SESSION_TOKEN")
         ),
         help="Optional S3 session token. Defaults to R2_SESSION_TOKEN/AWS_SESSION_TOKEN.",
     )
@@ -1621,9 +1619,9 @@ Examples:
             current_download_future = next_download_future
 
     # Print summary
-    logger.info(f"\n{'='*60}")
+    logger.info(f"\n{'=' * 60}")
     logger.info("PROCESSING COMPLETE")
-    logger.info(f"{'='*60}")
+    logger.info(f"{'=' * 60}")
     logger.info(f"Total batches processed: {len(batches_to_process)}")
     if args.max_batches is not None and args.max_batches < len(batches):
         logger.info(f"Remaining batches: {len(batches) - args.max_batches}")

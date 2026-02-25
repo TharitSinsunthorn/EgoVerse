@@ -54,7 +54,7 @@ SCALE_LEROBOT_EPISODE_HASH = "697c1e6c0cac8cd3c4873844"
 SCALE_ZARR_EPISODE_PATH = Path(
     "/nethome/agao81/flash/EgoVerse/external/scale/scripts/datasets/2026-02-20-18-52-08-062985/697c1e6c0cac8cd3c4873844_episode_000000.zarr"
 )
-SCALE_EMBODIMENT =  "scale_bimanual"
+SCALE_EMBODIMENT = "scale_bimanual"
 SCALE_CACHE_ROOT = "/coc/flash7/scratch/.cache"
 SCALE_ACTION_HORIZON_REAL = 30
 SCALE_ACTION_CHUNK_LENGTH = 100
@@ -77,7 +77,9 @@ def _to_numpy(value):
     return value
 
 
-def _assert_scale_pose_equivalent(zarr_val: np.ndarray, lerobot_val: np.ndarray, key_name: str) -> None:
+def _assert_scale_pose_equivalent(
+    zarr_val: np.ndarray, lerobot_val: np.ndarray, key_name: str
+) -> None:
     if zarr_val.shape[-1] != 12 or lerobot_val.shape[-1] != 12:
         np.testing.assert_allclose(
             zarr_val,
@@ -140,7 +142,9 @@ def _check_equal_dict(left: dict, right: dict, path: str = "root") -> None:
         right_np = _to_numpy(right_value)
 
         if isinstance(left_np, np.ndarray) or isinstance(right_np, np.ndarray):
-            assert isinstance(left_np, np.ndarray) and isinstance(right_np, np.ndarray), (
+            assert isinstance(left_np, np.ndarray) and isinstance(
+                right_np, np.ndarray
+            ), (
                 f"{key_path}: expected both values to be tensor/ndarray, "
                 f"got {type(left_value)} vs {type(right_value)}"
             )
@@ -180,8 +184,14 @@ def _build_zarr_dataset_eva() -> MultiDataset:
         "left.obs_gripper": {"zarr_key": "left.gripper"},
         "right.gripper": {"zarr_key": "right.gripper", "horizon": ACTION_HORIZON_REAL},
         "left.gripper": {"zarr_key": "left.gripper", "horizon": ACTION_HORIZON_REAL},
-        "right.cmd_ee_pose": {"zarr_key": "right.cmd_ee_pose", "horizon": ACTION_HORIZON_REAL},
-        "left.cmd_ee_pose": {"zarr_key": "left.cmd_ee_pose", "horizon": ACTION_HORIZON_REAL},
+        "right.cmd_ee_pose": {
+            "zarr_key": "right.cmd_ee_pose",
+            "horizon": ACTION_HORIZON_REAL,
+        },
+        "left.cmd_ee_pose": {
+            "zarr_key": "left.cmd_ee_pose",
+            "horizon": ACTION_HORIZON_REAL,
+        },
     }
 
     extrinsics = EXTRINSICS["x5Dec13_2"]
@@ -217,8 +227,14 @@ def _build_zarr_dataset_aria() -> MultiDataset:
         "observations.images.front_img_1": {"zarr_key": "images.front_1"},
         "left.obs_ee_pose": {"zarr_key": "left.obs_ee_pose"},
         "right.obs_ee_pose": {"zarr_key": "right.obs_ee_pose"},
-        "left.action_ee_pose": {"zarr_key": "left.obs_ee_pose", "horizon": ARIA_ACTION_HORIZON_REAL},
-        "right.action_ee_pose": {"zarr_key": "right.obs_ee_pose", "horizon": ARIA_ACTION_HORIZON_REAL},
+        "left.action_ee_pose": {
+            "zarr_key": "left.obs_ee_pose",
+            "horizon": ARIA_ACTION_HORIZON_REAL,
+        },
+        "right.action_ee_pose": {
+            "zarr_key": "right.obs_ee_pose",
+            "horizon": ARIA_ACTION_HORIZON_REAL,
+        },
         "obs_head_pose": {"zarr_key": "obs_head_pose"},
     }
 
@@ -276,7 +292,9 @@ def test_zarr_batch_matches_lerobot_batch_eva() -> None:
     for key in IMAGE_KEYS:
         lerobot_arr = _to_numpy(lerobot_subset[key])
         zarr_arr = _to_numpy(zarr_subset[key])
-        assert isinstance(lerobot_arr, np.ndarray) and isinstance(zarr_arr, np.ndarray), (
+        assert isinstance(lerobot_arr, np.ndarray) and isinstance(
+            zarr_arr, np.ndarray
+        ), (
             f"{key}: expected array/tensor values, got {type(lerobot_subset[key])} "
             f"and {type(zarr_subset[key])}"
         )
@@ -293,9 +311,9 @@ def test_zarr_batch_matches_lerobot_batch_eva() -> None:
 
     lerobot_actions = _to_numpy(non_image_lerobot.pop("actions_cartesian"))
     zarr_actions = _to_numpy(non_image_zarr.pop("actions_cartesian"))
-    assert isinstance(lerobot_actions, np.ndarray) and isinstance(zarr_actions, np.ndarray), (
-        "actions_cartesian must be tensors/arrays"
-    )
+    assert isinstance(lerobot_actions, np.ndarray) and isinstance(
+        zarr_actions, np.ndarray
+    ), "actions_cartesian must be tensors/arrays"
     assert lerobot_actions.shape == zarr_actions.shape, (
         f"actions_cartesian shape mismatch: {lerobot_actions.shape} vs {zarr_actions.shape}"
     )
@@ -334,7 +352,9 @@ def test_zarr_batch_matches_lerobot_batch_aria() -> None:
     for key in ARIA_IMAGE_KEYS:
         lerobot_arr = _to_numpy(lerobot_subset[key])
         zarr_arr = _to_numpy(zarr_subset[key])
-        assert isinstance(lerobot_arr, np.ndarray) and isinstance(zarr_arr, np.ndarray), (
+        assert isinstance(lerobot_arr, np.ndarray) and isinstance(
+            zarr_arr, np.ndarray
+        ), (
             f"{key}: expected array/tensor values, got {type(lerobot_subset[key])} "
             f"and {type(zarr_subset[key])}"
         )
@@ -343,7 +363,9 @@ def test_zarr_batch_matches_lerobot_batch_aria() -> None:
         )
 
     non_image_lerobot = {
-        key: value for key, value in lerobot_subset.items() if key not in ARIA_IMAGE_KEYS
+        key: value
+        for key, value in lerobot_subset.items()
+        if key not in ARIA_IMAGE_KEYS
     }
     non_image_zarr = {
         key: value for key, value in zarr_subset.items() if key not in ARIA_IMAGE_KEYS
@@ -412,7 +434,7 @@ def test_zarr_batch_matches_lerobot_batch_scale() -> None:
     missing_zarr = [z for z in SCALE_KEY_MAP if z not in zarr_batch]
     assert not missing_zarr, f"Zarr batch missing keys: {missing_zarr}"
 
-    missing_lr = [l for l in SCALE_KEY_MAP.values() if l not in lerobot_batch]
+    missing_lr = [key for key in SCALE_KEY_MAP.values() if key not in lerobot_batch]
     assert not missing_lr, f"Lerobot batch missing keys: {missing_lr}"
 
     for zarr_key, lerobot_key in SCALE_KEY_MAP.items():
@@ -420,14 +442,18 @@ def test_zarr_batch_matches_lerobot_batch_scale() -> None:
         lerobot_val = _to_numpy(lerobot_batch[lerobot_key])
 
         if zarr_key in SCALE_IMAGE_KEYS:
-            assert isinstance(zarr_val, np.ndarray) and isinstance(lerobot_val, np.ndarray), (
+            assert isinstance(zarr_val, np.ndarray) and isinstance(
+                lerobot_val, np.ndarray
+            ), (
                 f"{zarr_key}: expected arrays, got {type(zarr_val)} / {type(lerobot_val)}"
             )
             assert zarr_val.shape == lerobot_val.shape, (
                 f"{zarr_key}: image shape mismatch {zarr_val.shape} vs {lerobot_val.shape}"
             )
         else:
-            assert isinstance(zarr_val, np.ndarray) and isinstance(lerobot_val, np.ndarray), (
+            assert isinstance(zarr_val, np.ndarray) and isinstance(
+                lerobot_val, np.ndarray
+            ), (
                 f"{zarr_key}->{lerobot_key}: expected arrays, got "
                 f"{type(zarr_val)} / {type(lerobot_val)}"
             )
@@ -439,6 +465,8 @@ def test_zarr_batch_matches_lerobot_batch_scale() -> None:
                 )
             else:
                 np.testing.assert_allclose(
-                    zarr_val, lerobot_val, atol=1e-5,
+                    zarr_val,
+                    lerobot_val,
+                    atol=1e-5,
                     err_msg=f"{zarr_key} (zarr) vs {lerobot_key} (lerobot)",
                 )

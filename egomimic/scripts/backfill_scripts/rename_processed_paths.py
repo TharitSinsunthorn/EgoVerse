@@ -10,7 +10,7 @@ from egomimic.utils.aws.aws_sql import (
 
 def rename_processed_to_episode_hash(df, dry_run, max_workers=8, do_moves=True):
     """
-    For each row in the sql table there's processed path of the form rldb:/mecka/flagship/692ea0262fa9ba56c08f8097/	
+    For each row in the sql table there's processed path of the form rldb:/mecka/flagship/692ea0262fa9ba56c08f8097/
     We want to change this to s3://rldb/mecka/flagship/<row.episode_hash>/
     There are a lot of rows (42k), ideally the file renaming should be doen in a batch fashion.
     The processed paths are all on S3.
@@ -25,16 +25,17 @@ def rename_processed_to_episode_hash(df, dry_run, max_workers=8, do_moves=True):
     from sqlalchemy import MetaData, Table, bindparam, update
 
     from egomimic.utils.aws.aws_sql import create_default_engine
+
     def parse_s3_uri(uri):
         if uri is None:
             return None, None
         uri = str(uri)
         if not uri.startswith("s3://"):
             return None, None
-        rest = uri[len("s3://"):]
+        rest = uri[len("s3://") :]
         bucket, _, key = rest.partition("/")
         return bucket, key
-    
+
     def parse_rldb_uri(uri):
         """
         Given a URI of the form rldb:/mecka/flagship/692ea0262fa9ba56c08f8097/
@@ -45,7 +46,7 @@ def rename_processed_to_episode_hash(df, dry_run, max_workers=8, do_moves=True):
         uri = str(uri)
         if not uri.startswith("rldb:/"):
             return None, None
-        rest = uri[len("rldb:/"):]
+        rest = uri[len("rldb:/") :]
         bucket = "rldb"
         key = rest.lstrip("/")
         return bucket, key
@@ -67,6 +68,7 @@ def rename_processed_to_episode_hash(df, dry_run, max_workers=8, do_moves=True):
 
     def move_s3(pairs, chunk_size=100, max_workers=32):
         totals = {"prefixes": 0, "objects": None, "failures": 0}
+
         # tqdm is optional; fall back to no-op iterators if not installed
         # prefix_bar = tqdm(total=len(pairs), desc="Prefixes", unit="prefix", leave=True)
         # object_bar = tqdm(total=0, desc="Objects", unit="obj", leave=False)
@@ -191,7 +193,6 @@ def rename_processed_to_episode_hash(df, dry_run, max_workers=8, do_moves=True):
         "updates": len(updates),
         "skipped": skipped,
     }
-
 
 
 def main():

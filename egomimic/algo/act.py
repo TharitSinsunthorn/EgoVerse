@@ -418,7 +418,7 @@ class ACT(Algo):
             .transpose((0, 2, 3, 1))
             * 255
         ).astype(np.uint8)
-        preds = preds[self.data_schematic.action_keys()[0]]
+        preds = predictions[self.data_schematic.action_keys()[0]]
         gt = batch[self.data_schematic.action_keys()[0]]
 
         for b in range(ims.shape[0]):

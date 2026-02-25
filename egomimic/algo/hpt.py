@@ -1,3 +1,4 @@
+import os
 from collections import OrderedDict
 from functools import partial
 
@@ -12,7 +13,7 @@ from torchmetrics import MeanSquaredError
 from tslearn.metrics import SoftDTWLossPyTorch
 
 from egomimic.algo.algo import Algo
-from egomimic.models.hpt_nets import *
+from egomimic.models.hpt_nets import MultiheadAttention, SimpleTransformer
 from egomimic.rldb.utils import get_embodiment, get_embodiment_id
 from egomimic.utils.egomimicUtils import (
     STD_SCALE,

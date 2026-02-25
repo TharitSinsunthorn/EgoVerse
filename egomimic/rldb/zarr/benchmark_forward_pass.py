@@ -91,8 +91,14 @@ def benchmark_dataloader(
     memory_start_mb = get_memory_mb()
 
     # Benchmark
-    compute_info = f", simulated_compute={simulated_compute_sec}s" if simulated_compute_sec > 0 else ""
-    print(f"  Benchmarking {benchmark_batches} batches (batch_size={batch_size}, workers={num_workers}, prefetch={prefetch_factor}{compute_info})...")
+    compute_info = (
+        f", simulated_compute={simulated_compute_sec}s"
+        if simulated_compute_sec > 0
+        else ""
+    )
+    print(
+        f"  Benchmarking {benchmark_batches} batches (batch_size={batch_size}, workers={num_workers}, prefetch={prefetch_factor}{compute_info})..."
+    )
     samples_processed = 0
     progress_step = max(1, benchmark_batches // 10)
     total_loading_time = 0.0
@@ -125,7 +131,9 @@ def benchmark_dataloader(
                 time.sleep(simulated_compute_sec)
 
             if (i + 1) % progress_step == 0 or (i + 1) == benchmark_batches:
-                print(f"    Progress: {i + 1}/{benchmark_batches} ({(i + 1) / benchmark_batches:.0%})")
+                print(
+                    f"    Progress: {i + 1}/{benchmark_batches} ({(i + 1) / benchmark_batches:.0%})"
+                )
 
     total_start = time.perf_counter()
     if pytorch_profile:
@@ -146,17 +154,23 @@ def benchmark_dataloader(
     total_elapsed = time.perf_counter() - total_start
 
     batches_per_sec = benchmark_batches / total_elapsed if total_elapsed > 0 else 0
-    avg_loading_time_per_batch = total_loading_time / benchmark_batches if benchmark_batches > 0 else 0
+    avg_loading_time_per_batch = (
+        total_loading_time / benchmark_batches if benchmark_batches > 0 else 0
+    )
 
     # Actual overhead: how much longer did training take vs pure compute?
     expected_compute_time = simulated_compute_sec * benchmark_batches
     actual_overhead = total_elapsed - expected_compute_time
-    avg_overhead_per_batch = actual_overhead / benchmark_batches if benchmark_batches > 0 else 0
+    avg_overhead_per_batch = (
+        actual_overhead / benchmark_batches if benchmark_batches > 0 else 0
+    )
 
     # Memory statistics
     memory_end_mb = get_memory_mb()
     memory_delta_mb = memory_end_mb - memory_start_mb
-    avg_memory_mb = sum(memory_samples) / len(memory_samples) if memory_samples else memory_end_mb
+    avg_memory_mb = (
+        sum(memory_samples) / len(memory_samples) if memory_samples else memory_end_mb
+    )
 
     return {
         "batches_per_sec": batches_per_sec,
@@ -240,31 +254,77 @@ def print_results_table(results: list[dict]) -> None:
 
     # Init time
     if all(r.get("init_time_sec") is not None for r in valid_results):
-        rows.append(["Init time (s)"] + [f"{r['init_time_sec']:.3f}" for r in valid_results])
+        rows.append(
+            ["Init time (s)"] + [f"{r['init_time_sec']:.3f}" for r in valid_results]
+        )
 
     # Dataloader metrics
-    rows.append(["Batches/sec"] + [f"{r['dataloader']['batches_per_sec']:.1f}" for r in valid_results])
-    rows.append(["Avg load time/batch (ms)"] + [f"{r['dataloader']['avg_loading_time_per_batch']*1000:.1f}" for r in valid_results])
-    rows.append(["Avg overhead/batch (ms)"] + [f"{r['dataloader']['avg_overhead_per_batch']*1000:.1f}" for r in valid_results])
-    rows.append(["Total time (s)"] + [f"{r['dataloader']['total_elapsed_sec']:.2f}" for r in valid_results])
-    rows.append(["Samples processed"] + [f"{r['dataloader']['samples_processed']:,}" for r in valid_results])
+    rows.append(
+        ["Batches/sec"]
+        + [f"{r['dataloader']['batches_per_sec']:.1f}" for r in valid_results]
+    )
+    rows.append(
+        ["Avg load time/batch (ms)"]
+        + [
+            f"{r['dataloader']['avg_loading_time_per_batch'] * 1000:.1f}"
+            for r in valid_results
+        ]
+    )
+    rows.append(
+        ["Avg overhead/batch (ms)"]
+        + [
+            f"{r['dataloader']['avg_overhead_per_batch'] * 1000:.1f}"
+            for r in valid_results
+        ]
+    )
+    rows.append(
+        ["Total time (s)"]
+        + [f"{r['dataloader']['total_elapsed_sec']:.2f}" for r in valid_results]
+    )
+    rows.append(
+        ["Samples processed"]
+        + [f"{r['dataloader']['samples_processed']:,}" for r in valid_results]
+    )
 
     # Memory metrics
-    rows.append(["Memory start (MB)"] + [f"{r['dataloader']['memory_start_mb']:.1f}" for r in valid_results])
-    rows.append(["Memory end (MB)"] + [f"{r['dataloader']['memory_end_mb']:.1f}" for r in valid_results])
-    rows.append(["Peak memory (MB)"] + [f"{r['dataloader']['peak_memory_mb']:.1f}" for r in valid_results])
-    rows.append(["Memory delta (MB)"] + [f"{r['dataloader']['memory_delta_mb']:+.1f}" for r in valid_results])
-    rows.append(["Avg memory (MB)"] + [f"{r['dataloader']['avg_memory_mb']:.1f}" for r in valid_results])
+    rows.append(
+        ["Memory start (MB)"]
+        + [f"{r['dataloader']['memory_start_mb']:.1f}" for r in valid_results]
+    )
+    rows.append(
+        ["Memory end (MB)"]
+        + [f"{r['dataloader']['memory_end_mb']:.1f}" for r in valid_results]
+    )
+    rows.append(
+        ["Peak memory (MB)"]
+        + [f"{r['dataloader']['peak_memory_mb']:.1f}" for r in valid_results]
+    )
+    rows.append(
+        ["Memory delta (MB)"]
+        + [f"{r['dataloader']['memory_delta_mb']:+.1f}" for r in valid_results]
+    )
+    rows.append(
+        ["Avg memory (MB)"]
+        + [f"{r['dataloader']['avg_memory_mb']:.1f}" for r in valid_results]
+    )
 
     # Calculate column widths
-    col_widths = [max(len(str(row[i])) for row in [headers] + rows) for i in range(len(headers))]
+    col_widths = [
+        max(len(str(row[i])) for row in [headers] + rows) for i in range(len(headers))
+    ]
 
     # Print table
     print("\n" + "=" * (sum(col_widths) + 3 * len(col_widths) + 1))
-    print("| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |")
+    print(
+        "| " + " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers)) + " |"
+    )
     print("|" + "|".join("-" * (w + 2) for w in col_widths) + "|")
     for row in rows:
-        print("| " + " | ".join(str(v).rjust(col_widths[i]) for i, v in enumerate(row)) + " |")
+        print(
+            "| "
+            + " | ".join(str(v).rjust(col_widths[i]) for i, v in enumerate(row))
+            + " |"
+        )
     print("=" * (sum(col_widths) + 3 * len(col_widths) + 1))
 
 
@@ -297,15 +357,12 @@ def build_zarr_dataset(
         return dataset, f"Zarr ({root.name})", 1
 
     # Look for .zarr episode directories
-    episode_dirs = sorted([
-        path for path in root.iterdir()
-        if path.is_dir() and path.suffix == ".zarr"
-    ])
+    episode_dirs = sorted(
+        [path for path in root.iterdir() if path.is_dir() and path.suffix == ".zarr"]
+    )
 
     if not episode_dirs:
-        raise FileNotFoundError(
-            f"No .zarr episode directories found in {root}"
-        )
+        raise FileNotFoundError(f"No .zarr episode directories found in {root}")
 
     # Limit episodes if requested
     if max_episodes is not None:
@@ -317,10 +374,14 @@ def build_zarr_dataset(
     total_frames = 0
     for i, episode_dir in enumerate(episode_dirs):
         if (i + 1) % max(1, len(episode_dirs) // 10) == 0 or i == 0:
-            print(f"    Loading episode {i + 1}/{len(episode_dirs)}: {episode_dir.name}")
+            print(
+                f"    Loading episode {i + 1}/{len(episode_dirs)}: {episode_dir.name}"
+            )
         ds = ZarrDataset(str(episode_dir), action_horizon=action_horizon)
         datasets.append(ds)
-        total_frames += len(ds)  # Triggers init_episode during loop with progress output
+        total_frames += len(
+            ds
+        )  # Triggers init_episode during loop with progress output
 
     print(f"  Total frames: {total_frames:,}")
     print("  Creating ConcatDataset...")
@@ -357,16 +418,17 @@ def profile_single_episode(
 
     times = sorted(times)
     print("\nLoading time per sample:")
-    print(f"  Min:    {times[0]*1000:.2f}ms")
-    print(f"  Median: {times[len(times)//2]*1000:.2f}ms")
-    print(f"  Mean:   {sum(times)/len(times)*1000:.2f}ms")
-    print(f"  P95:    {times[int(len(times)*0.95)]*1000:.2f}ms")
-    print(f"  Max:    {times[-1]*1000:.2f}ms")
+    print(f"  Min:    {times[0] * 1000:.2f}ms")
+    print(f"  Median: {times[len(times) // 2] * 1000:.2f}ms")
+    print(f"  Mean:   {sum(times) / len(times) * 1000:.2f}ms")
+    print(f"  P95:    {times[int(len(times) * 0.95)] * 1000:.2f}ms")
+    print(f"  Max:    {times[-1] * 1000:.2f}ms")
 
 
 def main():
     # Check multiprocessing context
     import torch.multiprocessing as mp
+
     print(f"Multiprocessing start method: {mp.get_start_method()}")
 
     parser = argparse.ArgumentParser(
@@ -385,7 +447,7 @@ Examples:
 
   # Benchmark with simulated compute
   %(prog)s --zarr-path /data/zarr_episodes --simulated-compute 0.05
-        """
+        """,
     )
 
     # Dataset source
@@ -426,7 +488,7 @@ Examples:
         type=float,
         default=0.0,
         help="Simulated forward/backward pass time in seconds per batch (default: 0.0). "
-             "Use this to test whether data loading can keep up with GPU compute.",
+        "Use this to test whether data loading can keep up with GPU compute.",
     )
     parser.add_argument(
         "--warmup",
@@ -474,7 +536,9 @@ Examples:
     # Display action chunking info if enabled
     if args.action_horizon is not None:
         print(f"NOTE: Action chunking enabled (horizon={args.action_horizon})")
-        print("  - actions_base_cartesian and actions_joints will be loaded as sequences")
+        print(
+            "  - actions_base_cartesian and actions_joints will be loaded as sequences"
+        )
         print(f"  - Shape: (action_horizon={args.action_horizon}, action_dim)\n")
 
     print("=== Zarr Forward Pass Benchmark ===\n")

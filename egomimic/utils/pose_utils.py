@@ -7,6 +7,7 @@ from scipy.spatial.transform import Slerp
 def xyzw_to_wxyz(xyzw):
     return np.concatenate([xyzw[..., 3:4], xyzw[..., :3]], axis=-1)
 
+
 def _interpolate_euler(seq: np.ndarray, chunk_length: int) -> np.ndarray:
     """Euler-aware interpolation for a single (T, 6) or (T, 7) sequence."""
     T, D = seq.shape
@@ -129,9 +130,7 @@ def _xyzwxyz_to_matrix(xyzwxyz: np.ndarray) -> np.ndarray:
         raise ValueError(f"Expected (B, 7) array, got shape {xyzwxyz.shape}")
 
     B = xyzwxyz.shape[0]
-    dtype = (
-        xyzwxyz.dtype if np.issubdtype(xyzwxyz.dtype, np.floating) else np.float64
-    )
+    dtype = xyzwxyz.dtype if np.issubdtype(xyzwxyz.dtype, np.floating) else np.float64
 
     mats = np.broadcast_to(np.eye(4, dtype=dtype), (B, 4, 4)).copy()
     quat_xyzw = xyzwxyz[:, [4, 5, 6, 3]]

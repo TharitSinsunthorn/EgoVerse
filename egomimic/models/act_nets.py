@@ -330,7 +330,7 @@ class Transformer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, src, tgt, auto_masks=False):
-        assert auto_masks == False, "Auto mask not supported"
+        assert not auto_masks, "Auto mask not supported"
         src_mask = tgt_mask = None
 
         if self.src_embed:

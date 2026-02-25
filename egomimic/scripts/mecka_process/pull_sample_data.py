@@ -34,6 +34,7 @@ def download_files(data, output_dir, per_episode=False):
 
     print(f"\n✅ All available files saved in: {os.path.abspath(output_dir)}")
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Download sample data files from JSON metadata."
@@ -42,18 +43,18 @@ def main():
         "--json-path",
         required=True,
         type=str,
-        help="Path to the JSON file containing episode metadata."
+        help="Path to the JSON file containing episode metadata.",
     )
     parser.add_argument(
         "--output-dir",
         required=True,
         type=str,
-        help="Directory where downloaded files will be saved."
+        help="Directory where downloaded files will be saved.",
     )
     parser.add_argument(
         "--per-episode",
         action="store_true",
-        help="Save files into subfolders named by episode ID."
+        help="Save files into subfolders named by episode ID.",
     )
 
     args = parser.parse_args()

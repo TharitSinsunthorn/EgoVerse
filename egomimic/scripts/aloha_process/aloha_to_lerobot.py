@@ -378,13 +378,13 @@ class AlohaHD5Extractor:
             joint_actions = get_future_points(
                 joint_actions, POINT_GAP=POINT_GAP, CHUNK_LENGTH=CHUNK_LENGTH
             )
-            joint_actions_sampled = sample_interval_points(
+            sample_interval_points(
                 joint_actions, POINT_GAP=POINT_GAP, CHUNK_LENGTH=CHUNK_LENGTH
             )
             cartesian_actions = get_future_points(
                 cartesian_actions, POINT_GAP=POINT_GAP, CHUNK_LENGTH=CHUNK_LENGTH
             )
-            cartesian_actions_sampled = sample_interval_points(
+            sample_interval_points(
                 cartesian_actions, POINT_GAP=POINT_GAP, CHUNK_LENGTH=CHUNK_LENGTH
             )
 

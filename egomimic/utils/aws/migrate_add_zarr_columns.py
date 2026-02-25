@@ -60,7 +60,10 @@ def main() -> int:
             rows = conn.execute(verify_sql).all()
 
         if len(rows) != 3:
-            print("ERROR: expected 3 zarr columns in app.episodes after migration.", file=sys.stderr)
+            print(
+                "ERROR: expected 3 zarr columns in app.episodes after migration.",
+                file=sys.stderr,
+            )
             for row in rows:
                 print(f"Found column: {row.column_name}", file=sys.stderr)
             return 1

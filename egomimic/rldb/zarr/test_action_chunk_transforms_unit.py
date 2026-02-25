@@ -52,9 +52,7 @@ def _assert_snapshot(
         for k in expected_shapes
         if shapes.get(k) != expected_shapes[k]
     }
-    assert not shape_mismatch, (
-        f"step {idx} ({name}): shape mismatch {shape_mismatch}"
-    )
+    assert not shape_mismatch, f"step {idx} ({name}): shape mismatch {shape_mismatch}"
 
 
 def test_xyzwxyz_to_matrix_converts_wxyz_quaternion() -> None:
@@ -117,7 +115,9 @@ def test_action_chunk_coordinate_frame_transform_accepts_quat_wxyz_input() -> No
     np.testing.assert_allclose(chunk_target, expected, atol=1e-6)
 
 
-def test_action_chunk_coordinate_frame_transform_ypr_mode_invalid_chunk_shape_raises() -> None:
+def test_action_chunk_coordinate_frame_transform_ypr_mode_invalid_chunk_shape_raises() -> (
+    None
+):
     transform = ActionChunkCoordinateFrameTransform(
         target_world="target_world",
         chunk_world="chunk_world",
@@ -133,7 +133,9 @@ def test_action_chunk_coordinate_frame_transform_ypr_mode_invalid_chunk_shape_ra
         transform.transform(batch)
 
 
-def test_action_chunk_coordinate_frame_transform_quat_mode_invalid_chunk_shape_raises() -> None:
+def test_action_chunk_coordinate_frame_transform_quat_mode_invalid_chunk_shape_raises() -> (
+    None
+):
     transform = ActionChunkCoordinateFrameTransform(
         target_world="target_world",
         chunk_world="chunk_world",
@@ -265,7 +267,9 @@ def test_eva_builder_orders_xyzwxyz_to_xyzypr_after_interpolate_before_concat() 
     interpolate_indices = [
         i for i, t in enumerate(transform_list) if isinstance(t, InterpolatePose)
     ]
-    concat_indices = [i for i, t in enumerate(transform_list) if isinstance(t, ConcatKeys)]
+    concat_indices = [
+        i for i, t in enumerate(transform_list) if isinstance(t, ConcatKeys)
+    ]
 
     assert len(converter_indices) == 1
     converter_idx = converter_indices[0]
@@ -279,7 +283,9 @@ def test_eva_builder_orders_xyzwxyz_to_xyzypr_after_interpolate_before_concat() 
     }
 
 
-def test_aria_builder_orders_xyzwxyz_to_xyzypr_after_interpolate_before_concat() -> None:
+def test_aria_builder_orders_xyzwxyz_to_xyzypr_after_interpolate_before_concat() -> (
+    None
+):
     transform_list = build_aria_bimanual_transform_list(target_world_is_quat=True)
     converter_indices = [
         i for i, t in enumerate(transform_list) if isinstance(t, XYZWXYZ_to_XYZYPR)
@@ -287,7 +293,9 @@ def test_aria_builder_orders_xyzwxyz_to_xyzypr_after_interpolate_before_concat()
     interpolate_indices = [
         i for i, t in enumerate(transform_list) if isinstance(t, InterpolatePose)
     ]
-    concat_indices = [i for i, t in enumerate(transform_list) if isinstance(t, ConcatKeys)]
+    concat_indices = [
+        i for i, t in enumerate(transform_list) if isinstance(t, ConcatKeys)
+    ]
 
     assert len(converter_indices) == 1
     converter_idx = converter_indices[0]

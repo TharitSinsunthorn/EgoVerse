@@ -1,8 +1,5 @@
-import os
-
-folder_path = os.path.join(os.path.dirname(__file__))
-
 import argparse
+import os
 
 import cv2
 import h5py
@@ -134,7 +131,6 @@ def main():
                 missed_count += 1
                 continue
 
-            bounding_box_corners = detect_result[0].corners
             # draw bounding box on img and save
             # if args.debug:
             #     os.makedirs("calibration_imgs", exist_ok=True)
@@ -147,16 +143,16 @@ def main():
             )
             if args.debug:
                 print(
-                    f"[t={t}] reprojection error px per-corner: {np.round(resid,2)}, mean={resid.mean():.2f}"
+                    f"[t={t}] reprojection error px per-corner: {np.round(resid, 2)}, mean={resid.mean():.2f}"
                 )
                 # Save overlay image with detected (green) vs projected (red) corners
                 os.makedirs("calibration_imgs", exist_ok=True)
                 vis = img.copy()
                 # detected corners (green)
-                for (u, v) in detect_result[0].corners:
+                for u, v in detect_result[0].corners:
                     cv2.circle(vis, (int(u), int(v)), 4, (0, 255, 0), -1)
                 # projected corners (red)
-                for (u, v) in proj:
+                for u, v in proj:
                     cv2.circle(vis, (int(u), int(v)), 4, (0, 0, 255), -1)
                 cv2.putText(
                     vis,

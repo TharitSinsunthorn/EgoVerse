@@ -82,8 +82,6 @@ def _auto_stride(n, target_triads=50):
 
 
 def _set_axes_equal(ax):
-    xs = ax.get_w_lims()
-    x_range = xs[1] - xs[0]
     # quick equalization by data ranges
     xlims = ax.get_xlim3d()
     ylims = ax.get_ylim3d()

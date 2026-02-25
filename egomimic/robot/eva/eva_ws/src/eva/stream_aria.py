@@ -1,4 +1,5 @@
 import argparse
+import subprocess
 import sys
 
 import aria.sdk as aria
@@ -104,7 +105,7 @@ class AriaRecorder:
             print("Stopping an existing streaming session.")
             try:
                 self._streaming_manager.stop_streaming()
-            except:
+            except Exception:
                 print(
                     f"Aria Streaming State: {self._streaming_manager.streaming_state}"
                 )

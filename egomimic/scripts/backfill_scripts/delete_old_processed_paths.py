@@ -59,5 +59,6 @@ def main():
     with engine.begin() as conn:
         conn.execute(clear_stmt)
 
+
 if __name__ == "__main__":
     main()

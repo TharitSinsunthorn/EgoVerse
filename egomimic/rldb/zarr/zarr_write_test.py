@@ -42,7 +42,7 @@ def is_image_array(arr) -> bool:
     Returns:
         True if array appears to be an image sequence
     """
-    if not hasattr(arr, 'shape') or not hasattr(arr, 'dtype'):
+    if not hasattr(arr, "shape") or not hasattr(arr, "dtype"):
         return False
 
     if arr.ndim != 4:
@@ -173,9 +173,13 @@ def convert_hdf5_to_zarr(
                     if needs_transpose_to_hwc(nested_value):
                         # Transpose from (T, C, H, W) to (T, H, W, C)
                         nested_value = nested_value.transpose(0, 2, 3, 1)
-                        print(f"  Image: {nested_key} -> {nested_value.shape} (T×H×W×C) [transposed]")
+                        print(
+                            f"  Image: {nested_key} -> {nested_value.shape} (T×H×W×C) [transposed]"
+                        )
                     else:
-                        print(f"  Image: {nested_key} -> {nested_value.shape} (T×H×W×C)")
+                        print(
+                            f"  Image: {nested_key} -> {nested_value.shape} (T×H×W×C)"
+                        )
                     image_data[full_key] = nested_value
                 else:
                     numeric_data[full_key] = nested_value
@@ -188,12 +192,12 @@ def convert_hdf5_to_zarr(
             # Actions and other top-level data are numeric
             numeric_data[key] = value
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Data Summary:")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Numeric data: {len(numeric_data)} arrays")
     for key, value in numeric_data.items():
-        if hasattr(value, 'shape'):
+        if hasattr(value, "shape"):
             print(f"  {key}: shape {value.shape}, dtype {value.dtype}")
         else:
             print(f"  {key}: {type(value)}")
@@ -205,15 +209,19 @@ def convert_hdf5_to_zarr(
     if metadata_dict:
         print(f"\nMetadata: {len(metadata_dict)} items (excluded from features)")
         for key, value in metadata_dict.items():
-            if hasattr(value, 'shape'):
-                print(f"  {key}: shape {value.shape}, constant value {value[0] if len(value) > 0 else 'N/A'}")
+            if hasattr(value, "shape"):
+                print(
+                    f"  {key}: shape {value.shape}, constant value {value[0] if len(value) > 0 else 'N/A'}"
+                )
             else:
                 print(f"  {key}: {value}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Validate we have data to write
     if not numeric_data and not image_data:
-        print("\n❌ ERROR: No data to write! Both numeric_data and image_data are empty.")
+        print(
+            "\n❌ ERROR: No data to write! Both numeric_data and image_data are empty."
+        )
         return None
 
     # Determine robot type from arm
@@ -250,8 +258,16 @@ def convert_hdf5_to_zarr(
             with writer.write_incremental(total_frames=total_frames) as inc:
                 for start in range(0, total_frames, batch_size):
                     end = min(start + batch_size, total_frames)
-                    batch_numeric = {k: v[start:end] for k, v in numeric_data.items()} if numeric_data else {}
-                    batch_images = {k: v[start:end] for k, v in image_data.items()} if image_data else {}
+                    batch_numeric = (
+                        {k: v[start:end] for k, v in numeric_data.items()}
+                        if numeric_data
+                        else {}
+                    )
+                    batch_images = (
+                        {k: v[start:end] for k, v in image_data.items()}
+                        if image_data
+                        else {}
+                    )
                     inc.add_frames(numeric=batch_numeric, images=batch_images)
                     print(f"  Wrote frames {start}:{end} / {total_frames}")
 
@@ -269,6 +285,7 @@ def convert_hdf5_to_zarr(
     except Exception as e:
         print(f"\n❌ ERROR writing Zarr file: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -278,12 +295,13 @@ def convert_hdf5_to_zarr(
     if zarr_path.exists():
         # Get size of zarr directory
         import os
+
         total_size = sum(
             os.path.getsize(os.path.join(dirpath, filename))
             for dirpath, _, filenames in os.walk(zarr_path)
             for filename in filenames
         )
-        print(f"   Size: {total_size / (1024*1024):.2f} MB")
+        print(f"   Size: {total_size / (1024 * 1024):.2f} MB")
 
     # Verify the conversion
     print("\nVerifying Zarr episode...")
@@ -298,13 +316,14 @@ def convert_hdf5_to_zarr(
             dataset = ZarrDataset(zarr_path)
             frame = dataset[0]
             for key, value in frame.items():
-                if hasattr(value, 'shape'):
+                if hasattr(value, "shape"):
                     print(f"    {key}: shape {value.shape}, dtype {value.dtype}")
                 else:
                     print(f"    {key}: {type(value)}")
     except Exception as e:
         print(f"  ❌ ERROR verifying Zarr episode: {e}")
         import traceback
+
         traceback.print_exc()
 
     return zarr_path
@@ -339,20 +358,18 @@ The converter will:
   - Optionally prestack future actions into chunks
 
 Image arrays will be automatically detected and JPEG-compressed.
-        """
+        """,
     )
 
     # Input arguments
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        "--hdf5-path",
-        type=Path,
-        help="Path to a single HDF5 episode file to convert"
+        "--hdf5-path", type=Path, help="Path to a single HDF5 episode file to convert"
     )
     group.add_argument(
         "--hdf5-dir",
         type=Path,
-        help="Directory containing HDF5 episode files (*.hdf5) to convert"
+        help="Directory containing HDF5 episode files (*.hdf5) to convert",
     )
 
     # Output arguments
@@ -360,7 +377,7 @@ Image arrays will be automatically detected and JPEG-compressed.
         "--output-dir",
         type=Path,
         required=True,
-        help="Output directory for Zarr episodes"
+        help="Output directory for Zarr episodes",
     )
 
     # Eva-specific processing arguments
@@ -369,45 +386,41 @@ Image arrays will be automatically detected and JPEG-compressed.
         type=str,
         choices=["left", "right", "both"],
         default="both",
-        help="Which arm(s) to process (default: both)"
+        help="Which arm(s) to process (default: both)",
     )
     parser.add_argument(
         "--extrinsics-key",
         type=str,
         default="x5Dec13_2",
-        help="Camera extrinsics key from EXTRINSICS dict (default: x5Dec13_2)"
+        help="Camera extrinsics key from EXTRINSICS dict (default: x5Dec13_2)",
     )
     parser.add_argument(
-        "--prestack",
-        action="store_true",
-        help="Prestack future actions into chunks"
+        "--prestack", action="store_true", help="Prestack future actions into chunks"
     )
     parser.add_argument(
         "--low-res",
         action="store_true",
-        help="Downsample images to low resolution (240x320)"
+        help="Downsample images to low resolution (240x320)",
     )
     parser.add_argument(
-        "--no-rot",
-        action="store_true",
-        help="Skip rotation processing (position only)"
+        "--no-rot", action="store_true", help="Skip rotation processing (position only)"
     )
     parser.add_argument(
         "--fps",
         type=int,
         default=30,
-        help="Frames per second for the episode (default: 30)"
+        help="Frames per second for the episode (default: 30)",
     )
     parser.add_argument(
         "--incremental",
         action="store_true",
-        help="Use write_incremental with add_frames instead of bulk write"
+        help="Use write_incremental with add_frames instead of bulk write",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
         default=64,
-        help="Frames per batch when using --incremental (default: 64)"
+        help="Frames per batch when using --incremental (default: 64)",
     )
 
     args = parser.parse_args()
@@ -475,6 +488,7 @@ Image arrays will be automatically detected and JPEG-compressed.
             except Exception as e:
                 print(f"Error converting {hdf5_path}: {e}")
                 import traceback
+
                 traceback.print_exc()
                 continue
 

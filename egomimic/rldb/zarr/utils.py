@@ -1,23 +1,20 @@
 import ast
 import logging
+import math
+import os
+import random
 
 import numpy as np
 import pandas as pd
 import torch
 
 from egomimic.rldb.utils import get_embodiment_id
+from egomimic.rldb.zarr.zarr_dataset_multi import MultiDataset, ZarrDataset
 
 logger = logging.getLogger(__name__)
 
-import math
-import os
-import random
-
-from egomimic.rldb.zarr.zarr_dataset_multi import MultiDataset, ZarrDataset
-
 
 def set_global_seed(seed: int = 42):
-
     random.seed(seed)  # Python RNG
     np.random.seed(seed)  # NumPy RNG
     torch.manual_seed(seed)  # PyTorch CPU
@@ -476,7 +473,6 @@ class DataSchematic(object):
 
     @staticmethod
     def _iter_leaf_datasets(ds):
-
         if isinstance(ds, ZarrDataset):
             yield ds
         elif isinstance(ds, MultiDataset):

@@ -38,7 +38,7 @@ class ModelWrapper(LightningModule):
         )  # to ensure the lightning module has access to the model's parameters
         try:
             self.params = self.model.nets["policy"].params
-        except:
+        except Exception:
             pass
         self.grad_norm_history = deque(maxlen=self.grad_norm_mad_window)
 

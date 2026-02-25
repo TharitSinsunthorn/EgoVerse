@@ -35,9 +35,7 @@ except ModuleNotFoundError as exc:
         raise
 
 
-def create_default_engine(
-    host: str, dbname: str, user: str, password: str, port: int
-):
+def create_default_engine(host: str, dbname: str, user: str, password: str, port: int):
     engine = create_engine(
         f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}?sslmode=require",
         pool_pre_ping=True,
@@ -47,7 +45,9 @@ def create_default_engine(
     return engine
 
 
-def fetch_df(host: str, dbname: str, user: str, password: str, port: int) -> pd.DataFrame:
+def fetch_df(
+    host: str, dbname: str, user: str, password: str, port: int
+) -> pd.DataFrame:
     engine = create_default_engine(host, dbname, user, password, port)
     try:
         df = episode_table_to_df(engine)

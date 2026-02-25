@@ -251,7 +251,9 @@ def main():
     engine = create_default_engine()
     df = episode_table_to_df(engine)
     required_by_bucket, skipped, rldb_paths = collect_required_prefixes(df)
-    print(f"Found {sum(len(v) for v in required_by_bucket.values())} prefixes to check.")
+    print(
+        f"Found {sum(len(v) for v in required_by_bucket.values())} prefixes to check."
+    )
     if skipped:
         print(f"Skipped {skipped} rows without a valid processed_path.")
     report_rldb_paths(rldb_paths)

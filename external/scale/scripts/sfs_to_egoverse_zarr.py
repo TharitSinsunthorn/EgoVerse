@@ -3,13 +3,13 @@
 Scale SFS -> EgoVerse Zarr converter.
 
 Output keys per episode:
-    left.obs_ee_pose                 (T, 6)         xyzypr
-    right.obs_ee_pose                (T, 6)         xyzypr
+    left.obs_ee_pose                 (T, 7)         xyz + quat(w, x, y, z)
+    right.obs_ee_pose                (T, 7)         xyz + quat(w, x, y, z)
     left.obs_keypoints               (T, 63)        21 keypoints * 3 (xyz)
     right.obs_keypoints              (T, 63)        21 keypoints * 3 (xyz)
-    left.obs_wrist_pose              (T, 6)         xyzypr
-    right.obs_wrist_pose             (T, 6)         xyzypr
-    obs_head_pose                    (T, 6)         xyzypr
+    left.obs_wrist_pose              (T, 7)         xyz + quat(w, x, y, z)
+    right.obs_wrist_pose             (T, 7)         xyz + quat(w, x, y, z)
+    obs_head_pose                    (T, 7)         xyz + quat(w, x, y, z)
     images.front_1                   (T, H, W, 3)   JPEG-compressed by ZarrWriter
 
 Usage:
@@ -62,6 +62,21 @@ SUB_EPISODE_LENGTH = 300
 IMAGE_SIZE = (640, 480)  # (W, H) for cv2.resize
 
 
+
+def _batch_euler_to_quat(euler_zyx: np.ndarray) -> np.ndarray:
+    """(N, 3) euler ZYX -> (N, 4) quaternion wxyz."""
+    q_xyzw = R.from_euler("ZYX", euler_zyx, degrees=False).as_quat()  # scipy: xyzw
+    return q_xyzw[..., [3, 0, 1, 2]].astype(np.float32)              # reorder -> wxyz
+
+def _batch_pose6_to_pose7(pose6: np.ndarray) -> np.ndarray:
+    """(N, 6) [xyz ypr] -> (N, 7) [xyz quat_wxyz].  Invalid sentinels → zeros."""
+    N = pose6.shape[0]
+    out = np.zeros((N, 7), dtype=np.float32)
+    valid = ~np.any(pose6 >= INVALID_VALUE - 1, axis=1)
+    if valid.any():
+        out[valid, :3] = pose6[valid, :3]
+        out[valid, 3:] = _batch_euler_to_quat(pose6[valid, 3:6])
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -245,17 +260,16 @@ class SFSDataExtractor:
             )
         return frames
 
-    def load_images_for_range(self, start_idx: int, end_idx: int) -> list[np.ndarray | None]:
+    def load_all_images(self) -> list[np.ndarray | None]:
+        """Read every frame of the video sequentially (no seeking). Index i == video frame i."""
         cap = cv2.VideoCapture(self.video_path)
         if not cap.isOpened():
-            return [None] * (end_idx - start_idx)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
+            return []
         images: list[np.ndarray | None] = []
-        for _ in range(end_idx - start_idx):
+        while True:
             ret, frame = cap.read()
             if not ret:
-                images.append(None)
-                continue
+                break
             images.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         cap.release()
         return images
@@ -273,21 +287,25 @@ def _compute_palm_centroid(keypoints: np.ndarray) -> np.ndarray:
     return np.mean(palm_kps[valid_mask], axis=0).astype(np.float32)
 
 
-def _compute_palm_orientation(keypoints: np.ndarray, mirror_y: bool = False) -> np.ndarray:
+def _compute_palm_orientation(keypoints: np.ndarray, flip_x: bool = False) -> np.ndarray:
+    """Hand frame: x=right, y=down (palm normal toward ground), z=forward (toward fingers).
+    flip_x=True for the right hand so that x is rightward for both hands.
+    """
     wrist, index1, middle1, pinky1 = keypoints[0], keypoints[5], keypoints[9], keypoints[17]
-    if any(np.any(kp >= INVALID_VALUE - 1) for kp in (wrist, index1, pinky1)):
+    if any(np.any(kp >= INVALID_VALUE - 1) for kp in (wrist, index1, middle1, pinky1)):
         return np.zeros(3, dtype=np.float32)
-    x_axis = middle1 - wrist
-    x_axis /= np.linalg.norm(x_axis) + 1e-8
-    temp_y = pinky1 - wrist
-    z_axis = np.cross(x_axis, temp_y)
+    # z: forward — from wrist toward middle finger
+    z_axis = middle1 - wrist
     z_axis /= np.linalg.norm(z_axis) + 1e-8
+    # x: right — across palm, orthogonalized against z
+    # left hand:  index1 - pinky1 is rightward
+    # right hand: pinky1 - index1 is rightward  (flip_x=True)
+    across = (pinky1 - index1) if flip_x else (index1 - pinky1)
+    across -= np.dot(across, z_axis) * z_axis
+    x_axis = across / (np.linalg.norm(across) + 1e-8)
+    # y: down (palm normal toward ground) = cross(z, x)
     y_axis = np.cross(z_axis, x_axis)
     y_axis /= np.linalg.norm(y_axis) + 1e-8
-    if mirror_y:
-        y_axis = -y_axis
-        z_axis = np.cross(x_axis, y_axis)
-        z_axis /= np.linalg.norm(z_axis) + 1e-8
     rot = np.column_stack([x_axis, y_axis, z_axis])
     try:
         return R.from_matrix(rot).as_euler("ZYX", degrees=False).astype(np.float32)
@@ -295,11 +313,11 @@ def _compute_palm_orientation(keypoints: np.ndarray, mirror_y: bool = False) -> 
         return np.zeros(3, dtype=np.float32)
 
 
-def _compute_palm_6dof(keypoints: np.ndarray, mirror_y: bool = False) -> np.ndarray:
+def _compute_palm_6dof(keypoints: np.ndarray, flip_x: bool = False) -> np.ndarray:
     centroid = _compute_palm_centroid(keypoints)
     if np.any(centroid >= INVALID_VALUE - 1):
         return np.full(6, INVALID_VALUE, dtype=np.float32)
-    ypr = _compute_palm_orientation(keypoints, mirror_y=mirror_y)
+    ypr = _compute_palm_orientation(keypoints, flip_x=flip_x)
     return np.concatenate([centroid, ypr]).astype(np.float32)
 
 
@@ -310,22 +328,25 @@ def _compute_wrist_position(keypoints: np.ndarray) -> np.ndarray:
     return wrist.astype(np.float32)
 
 
-def _compute_wrist_orientation(keypoints: np.ndarray, mirror_y: bool = False) -> np.ndarray:
+def _compute_wrist_orientation(keypoints: np.ndarray, flip_x: bool = False) -> np.ndarray:
+    """Hand frame: x=right, y=down (palm normal toward ground), z=forward (toward fingers).
+    flip_x=True for the right hand so that x is rightward for both hands.
+    """
     wrist, index1, middle1, pinky1 = keypoints[0], keypoints[5], keypoints[9], keypoints[17]
-    if any(np.any(kp >= INVALID_VALUE - 1) for kp in (wrist, index1, pinky1)):
+    if any(np.any(kp >= INVALID_VALUE - 1) for kp in (wrist, index1, middle1, pinky1)):
         return np.zeros(3, dtype=np.float32)
-
-    x_axis = middle1 - wrist
-    x_axis /= np.linalg.norm(x_axis) + 1e-8
-    temp_y = pinky1 - wrist
-    z_axis = np.cross(x_axis, temp_y)
+    # z: forward — from wrist toward middle finger
+    z_axis = middle1 - wrist
     z_axis /= np.linalg.norm(z_axis) + 1e-8
+    # x: right — across palm, orthogonalized against z
+    # left hand:  index1 - pinky1 is rightward
+    # right hand: pinky1 - index1 is rightward  (flip_x=True)
+    across = (pinky1 - index1) if flip_x else (index1 - pinky1)
+    across -= np.dot(across, z_axis) * z_axis
+    x_axis = across / (np.linalg.norm(across) + 1e-8)
+    # y: down (palm normal toward ground) = cross(z, x)
     y_axis = np.cross(z_axis, x_axis)
     y_axis /= np.linalg.norm(y_axis) + 1e-8
-    if mirror_y:
-        y_axis = -y_axis
-        z_axis = np.cross(x_axis, y_axis)
-        z_axis /= np.linalg.norm(z_axis) + 1e-8
     rot = np.column_stack([x_axis, y_axis, z_axis])
     try:
         return R.from_matrix(rot).as_euler("ZYX", degrees=False).astype(np.float32)
@@ -333,11 +354,11 @@ def _compute_wrist_orientation(keypoints: np.ndarray, mirror_y: bool = False) ->
         return np.zeros(3, dtype=np.float32)
 
 
-def _compute_wrist_6dof(keypoints: np.ndarray, mirror_y: bool = False) -> np.ndarray:
+def _compute_wrist_6dof(keypoints: np.ndarray, flip_x: bool = False) -> np.ndarray:
     wrist_xyz = _compute_wrist_position(keypoints)
     if np.any(wrist_xyz >= INVALID_VALUE - 1):
         return np.full(6, INVALID_VALUE, dtype=np.float32)
-    wrist_ypr = _compute_wrist_orientation(keypoints, mirror_y=mirror_y)
+    wrist_ypr = _compute_wrist_orientation(keypoints, flip_x=flip_x)
     return np.concatenate([wrist_xyz, wrist_ypr]).astype(np.float32)
 
 
@@ -432,33 +453,47 @@ def convert_task_to_zarr(
     if n_frames <= ACTION_WINDOW:
         raise ValueError(f"Task {task_id} has too few frames ({n_frames})")
 
+    print(f"[{task_id}] Loading all video frames sequentially...")
+    t_vid = time.perf_counter()
+    all_images = extractor.load_all_images()
+    print(f"[{task_id}] Loaded {len(all_images)} video frames in {time.perf_counter() - t_vid:.1f}s  (SFS frames={n_frames})")
+    if len(all_images) != n_frames:
+        print(f"[{task_id}] WARNING: video frame count ({len(all_images)}) != SFS frame count ({n_frames}) — index drift possible")
+
     task_desc = _task_description(frames, extractor.demonstration_metadata)
     valid_frame_count = n_frames - ACTION_WINDOW
 
     # ------------------------------------------------------------------
     # Precompute all per-frame data into dense arrays (once)
     # ------------------------------------------------------------------
-    left_world = np.full((n_frames, 6), INVALID_VALUE, dtype=np.float32)
-    right_world = np.full((n_frames, 6), INVALID_VALUE, dtype=np.float32)
-    left_wrist = np.full((n_frames, 6), INVALID_VALUE, dtype=np.float32)
-    right_wrist = np.full((n_frames, 6), INVALID_VALUE, dtype=np.float32)
+    left_world_6 = np.full((n_frames, 6), INVALID_VALUE, dtype=np.float32)
+    right_world_6 = np.full((n_frames, 6), INVALID_VALUE, dtype=np.float32)
+    left_wrist_6 = np.full((n_frames, 6), INVALID_VALUE, dtype=np.float32)
+    right_wrist_6 = np.full((n_frames, 6), INVALID_VALUE, dtype=np.float32)
     left_kps = np.full((n_frames, 63), INVALID_VALUE, dtype=np.float32)
     right_kps = np.full((n_frames, 63), INVALID_VALUE, dtype=np.float32)
-    head_pose_world = np.zeros((n_frames, 6), dtype=np.float32)
+    head_pose_6 = np.zeros((n_frames, 6), dtype=np.float32)
 
     for i, frame in enumerate(frames):
         if frame.hand_keypoints.left is not None:
-            left_world[i] = _compute_palm_6dof(frame.hand_keypoints.left)
-            left_wrist[i] = _compute_wrist_6dof(frame.hand_keypoints.left)
+            left_world_6[i] = _compute_palm_6dof(frame.hand_keypoints.left)
+            left_wrist_6[i] = _compute_wrist_6dof(frame.hand_keypoints.left)
             left_kps[i] = frame.hand_keypoints.left.flatten().astype(np.float32)
         if frame.hand_keypoints.right is not None:
-            right_world[i] = _compute_palm_6dof(frame.hand_keypoints.right, mirror_y=True)
-            right_wrist[i] = _compute_wrist_6dof(frame.hand_keypoints.right, mirror_y=True)
+            right_world_6[i] = _compute_palm_6dof(frame.hand_keypoints.right, flip_x=True)
+            right_wrist_6[i] = _compute_wrist_6dof(frame.hand_keypoints.right, flip_x=True)
             right_kps[i] = frame.hand_keypoints.right.flatten().astype(np.float32)
-        head_pose_world[i, :3] = frame.camera_pose.position.astype(np.float32)
-        head_pose_world[i, 3:] = R.from_matrix(frame.camera_pose.rotation_matrix).as_euler(
+        head_pose_6[i, :3] = frame.camera_pose.position.astype(np.float32)
+        head_pose_6[i, 3:] = R.from_matrix(frame.camera_pose.rotation_matrix).as_euler(
             "ZYX", degrees=False
         ).astype(np.float32)
+
+    # Batch-convert all (N, 6) [xyz + euler ZYX] -> (N, 7) [xyz + quat xyzw]
+    left_world = _batch_pose6_to_pose7(left_world_6)
+    right_world = _batch_pose6_to_pose7(right_world_6)
+    left_wrist = _batch_pose6_to_pose7(left_wrist_6)
+    right_wrist = _batch_pose6_to_pose7(right_wrist_6)
+    head_pose_world = _batch_pose6_to_pose7(head_pose_6)
 
     # ------------------------------------------------------------------
     # Filter valid frame indices (same criteria as old script)
@@ -497,16 +532,16 @@ def convert_task_to_zarr(
         if len(sub) < 10:
             continue
 
-        min_frame = min(sub)
-        max_frame = max(sub)
-        image_batch = extractor.load_images_for_range(min_frame, max_frame+1)
-
         # First pass: figure out which frames have images
         kept: list[int] = []
+        none_count = 0
         for t in sub:
-            img = image_batch[t - min_frame]
+            img = all_images[t] if t < len(all_images) else None
             if img is not None:
                 kept.append(t)
+            else:
+                none_count += 1
+        print(f"[ep{written}] sub={len(sub)}  kept={len(kept)}  dropped(no image)={none_count}  frames=[{sub[0]}..{sub[-1]}]")
         if len(kept) < 10:
             continue
 
@@ -514,18 +549,18 @@ def convert_task_to_zarr(
 
         # ---- Per-frame current state (vectorised) ----
         kept_arr = np.array(kept)
-        left_curr_6 = left_world[kept_arr]   # (T, 6)
-        right_curr_6 = right_world[kept_arr]
-        left_curr_6 = np.where(left_curr_6 >= INVALID_VALUE - 1, 0.0, left_curr_6).astype(
+        left_curr_7 = left_world[kept_arr]   # (T, 7)
+        right_curr_7 = right_world[kept_arr]
+        left_curr_7 = np.where(left_curr_7 >= INVALID_VALUE - 1, 0.0, left_curr_7).astype(
             np.float32
         )
-        right_curr_6 = np.where(right_curr_6 >= INVALID_VALUE - 1, 0.0, right_curr_6).astype(
+        right_curr_7 = np.where(right_curr_7 >= INVALID_VALUE - 1, 0.0, right_curr_7).astype(
             np.float32
         )
-        left_wrist_curr_6 = np.where(
+        left_wrist_curr_7 = np.where(
             left_wrist[kept_arr] >= INVALID_VALUE - 1, 0.0, left_wrist[kept_arr]
         ).astype(np.float32)
-        right_wrist_curr_6 = np.where(
+        right_wrist_curr_7 = np.where(
             right_wrist[kept_arr] >= INVALID_VALUE - 1, 0.0, right_wrist[kept_arr]
         ).astype(np.float32)
 
@@ -540,19 +575,20 @@ def convert_task_to_zarr(
 
         # ---- Build image array ----
         images = np.stack(
-            [cv2.resize(image_batch[t - min_frame], IMAGE_SIZE, interpolation=cv2.INTER_LINEAR)
+            [cv2.resize(all_images[t], IMAGE_SIZE, interpolation=cv2.INTER_LINEAR)
              for t in kept],
             axis=0,
         ).astype(np.uint8)
+        print(f"[ep{written}] images.shape={images.shape}  kept_arr.shape={kept_arr.shape}  match={images.shape[0] == len(kept_arr)}")
 
         # ---- Numeric data ----
         numeric_data = {
-            "left.obs_ee_pose": left_curr_6,
-            "right.obs_ee_pose": right_curr_6,
+            "left.obs_ee_pose": left_curr_7,
+            "right.obs_ee_pose": right_curr_7,
             "left.obs_keypoints": left_keypoints,
             "right.obs_keypoints": right_keypoints,
-            "left.obs_wrist_pose": left_wrist_curr_6,
-            "right.obs_wrist_pose": right_wrist_curr_6,
+            "left.obs_wrist_pose": left_wrist_curr_7,
+            "right.obs_wrist_pose": right_wrist_curr_7,
             "obs_head_pose": actions_head,
         }
         image_data = {

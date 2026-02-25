@@ -4,7 +4,7 @@ defaults:
   - trainer: debug
   - debug: null
   - logger: debug
-  - data: eva_bc_zarr.yaml
+  - data: eva_bc_zarr
   - callbacks: checkpoints
   - override hydra/launcher: submitit
   - _self_

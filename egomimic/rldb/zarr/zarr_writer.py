@@ -44,7 +44,7 @@ class _IncrementalHandle:
         if self._total_frames is None:
             return self._capacity
         padded = self._total_frames
-        if w.enable_sharding and self._total_frames % w.chunk_timesteps != 0:
+        if self._total_frames % w.chunk_timesteps != 0:
             padded = (
                 (self._total_frames + w.chunk_timesteps - 1)
                 // w.chunk_timesteps
@@ -78,7 +78,7 @@ class _IncrementalHandle:
             frames_per_chunk = max(1, min(w.chunk_timesteps, padded))
             chunk_shape = (frames_per_chunk,) + frame_shape
 
-            if w.enable_sharding and not dynamic_length:
+            if not dynamic_length:
                 self._store.create_array(
                     key,
                     shape=full_shape,
@@ -113,7 +113,7 @@ class _IncrementalHandle:
             shape = (padded,)
             chunk_shape = (1,)
 
-            if w.enable_sharding and not dynamic_length:
+            if not dynamic_length:
                 self._store.create_array(
                     key,
                     shape=shape,
@@ -294,10 +294,10 @@ class ZarrWriter:
         episode_path: str | Path,
         embodiment: str = "",
         fps: int = 30,
-        task: str = "",
+        task_name: str = "debug",
+        task_description: str = "",
         annotations: list[tuple[str, int, int]] | None = None,
         chunk_timesteps: int = 100,
-        enable_sharding: bool = True,
     ):
         """
         Initialize ZarrWriter.
@@ -306,20 +306,20 @@ class ZarrWriter:
             episode_path: Path to episode .zarr directory.
             embodiment: Robot type identifier (e.g., "eva_bimanual").
             fps: Frames per second for playback (default: 30).
-            task: Task description.
+            task_name: Task name.
+            task_description: Task description.
             annotations: List of (text, start_idx, end_idx) tuples describing language annotations.
             chunk_timesteps: Number of timesteps per chunk for numeric arrays (default: 100).
-            enable_sharding: Enable Zarr sharding for better cloud performance (default: True).
         """
         self.episode_path = Path(episode_path)
 
         # Store parameters
         self.fps = fps
         self.embodiment = embodiment
-        self.task = task
+        self.task_name = task_name
+        self.task_description = task_description
         self.annotations = annotations if annotations is not None else []
         self.chunk_timesteps = chunk_timesteps
-        self.enable_sharding = enable_sharding
 
         # Track image shapes for metadata
         self._features: dict[str, dict[str, Any]] = {}
@@ -372,9 +372,9 @@ class ZarrWriter:
 
         self.total_frames = all_lengths[0]
 
-        # Calculate padded frame count if sharding is enabled
+        # Calculate padded frame count for sharding alignment
         padded_frames = self.total_frames
-        if self.enable_sharding and self.total_frames % self.chunk_timesteps != 0:
+        if self.total_frames % self.chunk_timesteps != 0:
             padded_frames = (
                 (self.total_frames + self.chunk_timesteps - 1) // self.chunk_timesteps
             ) * self.chunk_timesteps
@@ -470,21 +470,12 @@ class ZarrWriter:
         # Chunk shape: (frames, ...) - keep other dimensions intact
         chunk_shape = (frames_per_chunk,) + arr.shape[1:]
 
-        # Create array with or without sharding
-        if self.enable_sharding:
-            shard_shape = arr.shape
-            store.create_array(
-                key,
-                data=arr,
-                chunks=chunk_shape,
-                shards=shard_shape,
-            )
-        else:
-            store.create_array(
-                key,
-                data=arr,
-                chunks=chunk_shape,
-            )
+        store.create_array(
+            key,
+            data=arr,
+            chunks=chunk_shape,
+            shards=arr.shape,
+        )
 
         # Track shape and dtype for metadata
         dimension_names = [f"dim_{i}" for i in range(len(original_shape))]
@@ -532,23 +523,13 @@ class ZarrWriter:
         # Images are always chunked 1 per timestep, regardless of chunk_timesteps
         chunk_shape = (1,)
 
-        # Create array with VariableLengthBytes dtype
-        if self.enable_sharding:
-            shard_shape = encoded.shape
-            store.create_array(
-                key,
-                shape=encoded.shape,
-                chunks=chunk_shape,
-                shards=shard_shape,
-                dtype=VariableLengthBytes(),
-            )
-        else:
-            store.create_array(
-                key,
-                shape=encoded.shape,
-                chunks=chunk_shape,
-                dtype=VariableLengthBytes(),
-            )
+        store.create_array(
+            key,
+            shape=encoded.shape,
+            chunks=chunk_shape,
+            shards=encoded.shape,
+            dtype=VariableLengthBytes(),
+        )
 
         # Assign data after creation (required for VariableLengthBytes)
         store[key][:] = encoded
@@ -590,22 +571,13 @@ class ZarrWriter:
 
         chunk_shape = (1,)
 
-        if self.enable_sharding:
-            shard_shape = encoded_arr.shape
-            store.create_array(
-                key,
-                shape=encoded_arr.shape,
-                chunks=chunk_shape,
-                shards=shard_shape,
-                dtype=VariableLengthBytes(),
-            )
-        else:
-            store.create_array(
-                key,
-                shape=encoded_arr.shape,
-                chunks=chunk_shape,
-                dtype=VariableLengthBytes(),
-            )
+        store.create_array(
+            key,
+            shape=encoded_arr.shape,
+            chunks=chunk_shape,
+            shards=encoded_arr.shape,
+            dtype=VariableLengthBytes(),
+        )
 
         store[key][:] = encoded_arr
 
@@ -643,22 +615,13 @@ class ZarrWriter:
 
         n_annotations = len(annotations)
         chunk_shape = (max(1, n_annotations),)
-        if self.enable_sharding:
-            shard_shape = (n_annotations,)
-            store.create_array(
-                "annotations",
-                shape=encoded.shape,
-                chunks=chunk_shape,
-                shards=shard_shape,
-                dtype=VariableLengthBytes(),
-            )
-        else:
-            store.create_array(
-                "annotations",
-                shape=encoded.shape,
-                chunks=chunk_shape,
-                dtype=VariableLengthBytes(),
-            )
+        store.create_array(
+            "annotations",
+            shape=encoded.shape,
+            chunks=chunk_shape,
+            shards=(n_annotations,),
+            dtype=VariableLengthBytes(),
+        )
         if n_annotations > 0:
             store["annotations"][:] = encoded
 
@@ -686,7 +649,8 @@ class ZarrWriter:
             "embodiment": self.embodiment,
             "total_frames": self.total_frames,
             "fps": self.fps,
-            "task": self.task,
+            "task_name": self.task_name,
+            "task_description": self.task_description,
             "features": self._features,
         }
 
@@ -704,10 +668,10 @@ class ZarrWriter:
         pre_encoded_image_data: dict[str, tuple[np.ndarray, list[int]]] | None = None,
         embodiment: str = "",
         fps: int = 30,
-        task: str = "",
+        task_name: str = "",
+        task_description: str = "",
         annotations: list[tuple[str, int, int]] | None = None,
         chunk_timesteps: int = 100,
-        enable_sharding: bool = True,
         metadata_override: dict[str, Any] | None = None,
     ) -> Path:
         """
@@ -721,10 +685,10 @@ class ZarrWriter:
                 Skips internal JPEG encoding for these keys.
             embodiment: Robot type identifier.
             fps: Frames per second (default: 30).
-            task: Task description.
+            task_name: Task name.
+            task_description: Task description.
             annotations: List of (text, start_idx, end_idx) tuples describing language annotations.
             chunk_timesteps: Number of timesteps per chunk for numeric arrays (default: 100).
-            enable_sharding: Enable Zarr sharding (default: True).
             metadata_override: Optional metadata overrides.
 
         Returns:
@@ -737,10 +701,10 @@ class ZarrWriter:
             episode_path=episode_path,
             embodiment=embodiment,
             fps=fps,
-            task=task,
+            task_name=task_name,
+            task_description=task_description,
             annotations=annotations,
             chunk_timesteps=chunk_timesteps,
-            enable_sharding=enable_sharding,
         )
 
         writer.write(

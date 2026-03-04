@@ -753,9 +753,8 @@ def convert_task_to_zarr(
             },
             embodiment=resolved_embodiment,
             fps=fps,
-            task=task_desc,
+            task_description=task_desc,
             annotations=lang_ann if lang_ann else None,
-            enable_sharding=True,
             metadata_override=meta_override or None,
         )
         written += 1

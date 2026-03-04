@@ -278,8 +278,8 @@ def convert_hdf5_to_zarr(
                 image_data=image_data if image_data else None,
                 fps=fps,
                 embodiment=embodiment,
-                task_name="test name",
-                task_description="test description",
+                task_name="debug",
+                task_description="",
             )
     except Exception as e:
         print(f"\n❌ ERROR writing Zarr file: {e}")

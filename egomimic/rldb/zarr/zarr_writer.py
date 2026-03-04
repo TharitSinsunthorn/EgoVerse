@@ -668,7 +668,7 @@ class ZarrWriter:
         pre_encoded_image_data: dict[str, tuple[np.ndarray, list[int]]] | None = None,
         embodiment: str = "",
         fps: int = 30,
-        task_name: str = "",
+        task_name: str = "debug",
         task_description: str = "",
         annotations: list[tuple[str, int, int]] | None = None,
         chunk_timesteps: int = 100,

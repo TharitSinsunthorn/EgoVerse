@@ -70,7 +70,9 @@ class PI(Algo):
 
         self.domains = domains
 
-        self.device = None
+        self.device = kwargs.get(
+            "device", torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
 
         self.camera_keys = {}
         self.proprio_keys = {}
@@ -181,6 +183,11 @@ class PI(Algo):
                     processed_batch[embodiment_id][tk] = _batch[tk]
 
             ac_key = self.ac_keys[embodiment_id]
+            if ac_key not in processed_batch[embodiment_id]:
+                raise KeyError(
+                    f"Missing action key '{ac_key}' for embodiment {embodiment_id}. "
+                    f"Incoming keys were: {list(_batch.keys())}"
+                )
             if len(processed_batch[embodiment_id][ac_key].shape) != 3:
                 raise ValueError("Action shape in batch is not 2")
 
@@ -224,10 +231,11 @@ class PI(Algo):
             proprio_keys = self.proprio_keys[embodiment_id]
             lang_keys = self.lang_keys[embodiment_id]
             ac_key = self.ac_keys[embodiment_id]
+            camera_keys = self.camera_keys.get(embodiment_id, self.pi_cam_keys)
             embodiment_name = get_embodiment(embodiment_id).lower()
             processed_obs, action = self._robomimic_to_pi_data(
                 _batch,
-                self.pi_cam_keys,
+                camera_keys,
                 proprio_keys,
                 lang_keys,
                 ac_key,
@@ -265,10 +273,11 @@ class PI(Algo):
                 proprio_keys = self.proprio_keys[embodiment_id]
                 lang_keys = self.lang_keys[embodiment_id]
                 ac_key = self.ac_keys[embodiment_id]
+                camera_keys = self.camera_keys.get(embodiment_id, self.pi_cam_keys)
                 embodiment_name = get_embodiment(embodiment_id).lower()
                 processed_obs, action = self._robomimic_to_pi_data(
                     _batch,
-                    self.pi_cam_keys,
+                    camera_keys,
                     proprio_keys,
                     lang_keys,
                     ac_key,

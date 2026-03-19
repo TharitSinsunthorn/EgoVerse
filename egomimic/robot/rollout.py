@@ -223,26 +223,32 @@ class PolicyRollout(Rollout):
         super().__init__()
         self.arm = arm
         self.policy_path = policy_path
-        self.policy = ModelWrapper.load_from_checkpoint(policy_path, weights_only=False)
         self.query_frequency = query_frequency
         self.cartesian = cartesian
         self.embodiment_id = EMBODIMENT_MAP[self.arm]
         self.embodiment_name = get_embodiment(self.embodiment_id)
-        if getattr(self.policy.model, "diffusion", False):
-            for head in self.policy.model.nets.policy.heads:
-                if isinstance(
-                    self.policy.model.nets.policy.heads[head], DenoisingPolicy
-                ):
-                    self.policy.model.nets.policy.heads[head].num_inference_steps = 10
         self.extrinsics = CameraTransforms(
             intrinsics_key="base", extrinsics_key=extrinsics_key
         ).extrinsics
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.policy_device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.policy.to(self.policy_device)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.policy_device = self.device
+        self.policy = self._load_policy()
         self.debug_actions = None
         self.resampled_action_len = resampled_action_len
         self.debug = debug
+
+    def _load_policy(self):
+        policy = ModelWrapper.load_from_checkpoint(
+            self.policy_path, weights_only=False, map_location="cpu"
+        )
+        policy = policy.to(self.policy_device)
+        policy.eval()
+        policy.model.device = self.policy_device
+        if getattr(policy.model, "diffusion", False):
+            for head in policy.model.nets.policy.heads:
+                if isinstance(policy.model.nets.policy.heads[head], DenoisingPolicy):
+                    policy.model.nets.policy.heads[head].num_inference_steps = 10
+        return policy
 
     def _downsample_chunk(self, chunk: np.ndarray, target_len: int) -> np.ndarray:
         if target_len is None or target_len <= 0 or chunk.shape[0] == target_len:
@@ -365,7 +371,7 @@ class PolicyRollout(Rollout):
             right_ypr = right_ee_pose[..., 3:6]
             right_xyzw = R.from_euler("ZYX", right_ypr).as_quat()
             right_wxyz = xyzw_to_wxyz(right_xyzw)
-            right_xyzwxyz = np.concatenate([eepose[:3], right_wxyz], axis=-1)
+            right_xyzwxyz = np.concatenate([eepose[7:10], right_wxyz], axis=-1)
             data["right.obs_ee_pose"] = torch.from_numpy(right_xyzwxyz).reshape(-1)
             data["right.obs_gripper"] = torch.from_numpy(eepose[13:14]).reshape(-1)
             right_gripper = torch.from_numpy(eepose[13:14]).view(1, 1).repeat(45, 1)
@@ -410,15 +416,7 @@ class PolicyRollout(Rollout):
     def reset(self):
         self.actions = None
         self.debug_actions = None
-        self.policy = ModelWrapper.load_from_checkpoint(
-            self.policy_path, weights_only=False
-        )
-        if getattr(self.policy.model, "diffusion", False):
-            for head in self.policy.model.nets.policy.heads:
-                if isinstance(
-                    self.policy.model.nets.policy.heads[head], DenoisingPolicy
-                ):
-                    self.policy.model.nets.policy.heads[head].num_inference_steps = 10
+        self.policy = self._load_policy()
 
 
 def debug_policy(

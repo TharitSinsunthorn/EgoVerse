@@ -291,8 +291,15 @@ def _viz_annotations(image, annotations: list[str], **kwargs):
     margin = int(h * 0.02)
     max_text_width = w - 2 * margin
 
+    flat = []
+    for item in annotations:
+        if isinstance(item, (list, tuple)):
+            flat.extend(item)
+        else:
+            flat.append(item)
+
     wrapped_lines = []
-    for text in annotations:
+    for text in flat:
         wrapped_lines.extend(
             _wrap_text(text, font, font_scale, thickness, max_text_width)
         )

@@ -718,12 +718,13 @@ class ZarrDataset(torch.utils.data.Dataset):
         Resolve language annotation text for a frame from span annotations.
         """
         annotations = self._load_annotations()
+        valid_annotations = []
         for ann in annotations:
             start_idx = int(ann.get("start_idx", -1))
             end_idx = int(ann.get("end_idx", -1))
-            if start_idx <= frame_idx <= end_idx:
-                return str(ann.get("text", ""))
-        return ""
+            if start_idx <= frame_idx < end_idx:
+                valid_annotations.append(ann.get("text", ""))
+        return valid_annotations
 
     def __len__(self) -> int:
         return self.total_frames
@@ -750,9 +751,10 @@ class ZarrDataset(torch.utils.data.Dataset):
         data = {}
         for k in self.key_map:
             zarr_key = self.key_map[k]["zarr_key"]
+            key_type = self.key_map[k].get("key_type", None)
             horizon = self.key_map[k].get("horizon", None)
 
-            if zarr_key == "annotations":
+            if key_type == "annotation_keys":
                 data[k] = self._annotation_text_for_frame(idx)
                 continue
 

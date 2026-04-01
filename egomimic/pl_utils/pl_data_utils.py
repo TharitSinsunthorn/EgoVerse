@@ -71,7 +71,7 @@ class MultiDataModuleWrapper(LightningDataModule):
                 model_name=model_name,
             )
         else:
-            self.collate_fn = default_collate
+            self.collate_fn = annotation_collate
 
     def train_dataloader(self):
         iterables = dict()
@@ -228,6 +228,25 @@ class DataModuleWrapper(LightningDataModule):
             **self.valid_dataloader_params,
         )
         return new_dataloader
+
+
+def _extract_list_keys(batch):
+    """Pop all list-valued keys from *batch* samples and return them separately.
+
+    This lets ``default_collate`` handle tensors / numbers while variable-length
+    annotation lists (``key_type == "annotation_keys"``) are preserved as
+    ``list[list[str]]``.
+    """
+    list_keys = {k for k in batch[0] if isinstance(batch[0][k], list)}
+    return {k: [sample.pop(k) for sample in batch] for k in list_keys}
+
+
+def annotation_collate(batch):
+    """Collate that preserves variable-length list-valued keys (e.g. annotation_keys)."""
+    extracted = _extract_list_keys(batch)
+    collated = default_collate(batch)
+    collated.update(extracted)
+    return collated
 
 
 def build_tokenized_collate(max_length=128, model_name="google/paligemma-3b-mix-224"):

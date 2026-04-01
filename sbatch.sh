@@ -1,10 +1,11 @@
 #!/bin/bash
 
-#SBATCH --job-name=sync_s3
+#SBATCH --job-name=aria_train
 #SBATCH --partition=hoffman-lab
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=15
+#SBATCH --gpus-per-node="a40:1"
 #SBATCH --qos="short"
 #SBATCH --exclude="conroy"
 
@@ -19,4 +20,5 @@ pwd
 ls
 
 export PYTHONIOENCODING=utf-8
-srun -u python -u egomimic/scripts/data_download/sync_s3.py --local-dir /coc/flash7/scratch/egoverseS3ZarrDataset/ --filters all-human
+srun -u python -u egomimic/trainHydra.py --config-name=train_zarr_cartesian data=aria model=hpt_bc_flow_aria
+    

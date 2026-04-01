@@ -4,8 +4,9 @@ train_datasets:
   aria_bimanual:
     _target_: egomimic.rldb.zarr.zarr_dataset_multi.MultiDataset._from_resolver
     resolver:
-      _target_: egomimic.rldb.zarr.zarr_dataset_multi.LocalEpisodeResolver
-      folder_path: /coc/flash7/scratch/egoverseS3ZarrDataset
+      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3EpisodeResolver
+      folder_path: /coc/flash7/scratch/egoverseS3ZarrDataset/
+      sidecar_metadata_path: /coc/flash9/fryan6/data/egoverse_head_meta.json
       key_map:
         _target_: egomimic.rldb.embodiment.human.Aria.get_keymap
         mode: cartesian
@@ -15,15 +16,15 @@ train_datasets:
     filters:
       _target_: egomimic.rldb.filters.DatasetFilter
       filter_lambdas:
-        - "lambda row: str(row.get('embodiment', '')).startswith('aria')"
-        - "lambda row: str(row.get('task_name', '')).startswith('fold_clothes')"
+        - "lambda row: row['episode_hash'] == '2025-09-20-17-47-54-000000'"
     mode: total
+
 valid_datasets:
   aria_bimanual:
     _target_: egomimic.rldb.zarr.zarr_dataset_multi.MultiDataset._from_resolver
     resolver:
-      _target_: egomimic.rldb.zarr.zarr_dataset_multi.LocalEpisodeResolver
-      folder_path: /coc/flash7/scratch/egoverseS3ZarrDataset
+      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3EpisodeResolver
+      folder_path: /coc/flash7/scratch/egoverseS3ZarrDataset/
       key_map:
         _target_: egomimic.rldb.embodiment.human.Aria.get_keymap
         mode: cartesian
@@ -33,13 +34,14 @@ valid_datasets:
     filters:
       _target_: egomimic.rldb.filters.DatasetFilter
       filter_lambdas:
-        - "lambda row: str(row.get('embodiment', '')).startswith('aria')"
-        - "lambda row: str(row.get('task_name', '')).startswith('fold_clothes')"
+        - "lambda row: row['episode_hash'] == '2025-09-20-17-47-54-000000'"
     mode: total
+
 train_dataloader_params:
   aria_bimanual:
     batch_size: 32
     num_workers: 10
+
 valid_dataloader_params:
   aria_bimanual:
     batch_size: 32

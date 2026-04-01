@@ -1,0 +1,67 @@
+defaults:
+  - model: hpt_bc_flow_aria
+  - visualization: eva_cartesian_aria_cartesian
+  - paths: default
+  - trainer: ddp
+  - debug: null
+  - logger: wandb
+  - data: aria
+  - callbacks: checkpoints
+  - data_schematic: default
+  - _self_
+
+name: test_local
+description: aria_local_only
+ckpt_path: null
+train: true
+eval: false
+
+seed: 42
+
+norm_stats:
+  sample_frac: 1.0
+  num_workers: 10
+
+# Override this on the CLI if needed, e.g.
+# python trainHydra.py --config-name=train_local local_data_path=/path/to/aria_zarrs
+local_data_path: /coc/flash7/scratch/egoverseS3ZarrDataset/
+
+data:
+  train_datasets:
+    aria_bimanual:
+      resolver:
+        _target_: egomimic.rldb.zarr.zarr_dataset_multi.LocalEpisodeResolver
+        folder_path: ${local_data_path}
+        key_map:
+          _target_: egomimic.rldb.embodiment.human.Aria.get_keymap
+          mode: cartesian
+        transform_list:
+          _target_: egomimic.rldb.embodiment.human.Aria.get_transform_list
+          mode: cartesian
+  valid_datasets:
+    aria_bimanual:
+      resolver:
+        _target_: egomimic.rldb.zarr.zarr_dataset_multi.LocalEpisodeResolver
+        folder_path: ${local_data_path}
+        key_map:
+          _target_: egomimic.rldb.embodiment.human.Aria.get_keymap
+          mode: cartesian
+        transform_list:
+          _target_: egomimic.rldb.embodiment.human.Aria.get_transform_list
+          mode: cartesian
+
+eval_class:
+  _target_: egomimic.scripts.evaluation.Eve
+  mode: real
+  arm: both
+  eval_path: "./logs/eval/${name}_${now:%Y-%m-%d_%H-%M-%S}"
+
+hydra:
+  run:
+    dir: ./logs/${name}/${description}_${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: ./logs/${name}/${description}_${now:%Y-%m-%d_%H-%M-%S}
+
+launch_params:
+  gpus_per_node: 1
+  nodes: 1

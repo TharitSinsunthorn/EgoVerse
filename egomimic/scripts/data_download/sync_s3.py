@@ -27,6 +27,11 @@ DEFAULT_FILTERS = {
             "lambda row: row.get('task') == 'fold_clothes'",
         ]
     ),
+    "all-human": DatasetFilter(
+        filter_lambdas=[
+            "lambda row: row.get('robot_name') in ['aria_bimanual', 'mecka_bimanual', 'scale_bimanual']"
+        ]
+    ),
 }
 
 

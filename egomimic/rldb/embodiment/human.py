@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Literal
 
 from egomimic.rldb.embodiment.embodiment import Embodiment
@@ -193,6 +194,13 @@ class Human(Embodiment):
             )
         return key_map
 
+    @abstractmethod
+    def get_transform_list(
+        cls,
+        mode: str,
+    ) -> list[Transform]:
+        pass
+
 
 class Aria(Human):
     VIZ_INTRINSICS_KEY = "base"
@@ -278,10 +286,30 @@ class Scale(Human):
     VIZ_INTRINSICS_KEY = "scale"
     ACTION_STRIDE = 1
 
+    @classmethod
+    def get_transform_list(
+        cls,
+        mode: Literal["cartesian",],
+    ) -> list[Transform]:
+        if mode == "cartesian":
+            return _build_aria_cartesian_bimanual_transform_list(
+                stride=cls.ACTION_STRIDE
+            )
+
 
 class Mecka(Human):
     VIZ_INTRINSICS_KEY = "mecka"
     ACTION_STRIDE = 1
+
+    @classmethod
+    def get_transform_list(
+        cls,
+        mode: Literal["cartesian",],
+    ) -> list[Transform]:
+        if mode == "cartesian":
+            return _build_aria_cartesian_bimanual_transform_list(
+                stride=cls.ACTION_STRIDE
+            )
 
 
 # this works for quat and ypr since actionChunkCoordinateFrameTransform works for both

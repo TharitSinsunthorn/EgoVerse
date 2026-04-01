@@ -15,7 +15,7 @@ train_datasets:
     filters:
       _target_: egomimic.rldb.filters.DatasetFilter
       filter_lambdas:
-        - "lambda row: row['episode_hash'] in {'2026-03-18-19-05-27-437004', '2026-03-18-19-03-29-311551'}"
+        - "lambda row: row['episode_hash'] in {'2026-03-16-01-22-26-448000'}"
     mode: total
 valid_datasets:
   scale_bimanual:
@@ -32,7 +32,7 @@ valid_datasets:
     filters:
       _target_: egomimic.rldb.filters.DatasetFilter
       filter_lambdas:
-        - "lambda row: row['episode_hash'] in {'2026-03-18-19-05-27-437004', '2026-03-18-19-03-29-311551'}"
+        - "lambda row: row['episode_hash'] in {'2026-03-16-01-22-26-448000'}"
     mode: total
 train_dataloader_params:
   scale_bimanual:

@@ -1,5 +1,5 @@
 import copy
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Literal
 
@@ -136,9 +136,27 @@ class Embodiment(ABC):
             f"Unsupported mode '{mode}'. Expected one of: ('traj', 'traj+rotation', 'axes', 'annotations')."
         )
 
-    @staticmethod
-    def get_keymap():
+    @classmethod
+    def get_keymap(cls, keymap_mode: str, norm_mode: bool = False, annotation_key=None):
         """Returns a dictionary mapping from the raw keys in the dataset to the canonical keys used by the model."""
+        key_map = cls._get_keymap(keymap_mode)
+        if annotation_key is not None and not norm_mode:
+            key_map[annotation_key] = {
+                "key_type": "annotation_keys",
+                "zarr_key": annotation_key,
+            }
+        if norm_mode:
+            to_delete = [
+                k
+                for k, v in key_map.items()
+                if v.get("key_type") in ("camera_keys", "annotation_keys")
+            ]
+            for k in to_delete:
+                del key_map[k]
+        return key_map
+
+    @abstractmethod
+    def _get_keymap(cls, keymap_mode: str):
         raise NotImplementedError
 
     @classmethod
@@ -148,6 +166,7 @@ class Embodiment(ABC):
         batch,
         image_key,
         action_key,
+        annotation_key=None,
         transform_list=None,
         mode=Literal["traj", "traj+rotation", "axes", "keypoints"],
         gt_alpha=1.0,
@@ -169,6 +188,8 @@ class Embodiment(ABC):
 
         images = batch[image_key]
         actions = batch[action_key]
+        if annotation_key is not None:
+            annotations = batch[annotation_key]
         ims_list = []
         images = _to_numpy(images)
         actions = _to_numpy(actions)
@@ -183,6 +204,8 @@ class Embodiment(ABC):
             ims = cls.viz(
                 ims, pred_action, mode=mode, color="Reds", alpha=pred_alpha, **kwargs
             )
+            if annotation_key is not None:
+                ims = cls.viz(ims, [annotations[i]], mode="annotations", **kwargs)
             ims_list.append(ims)
         ims = np.stack(ims_list, axis=0)
         return ims

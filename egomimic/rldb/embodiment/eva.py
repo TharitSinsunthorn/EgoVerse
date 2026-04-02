@@ -30,7 +30,7 @@ class Eva(Embodiment):
     def get_transform_list(
         mode: Literal[
             "cartesian", "cartesian_wristframe_ypr", "cartesian_wristframe_quat"
-        ] = "cartesian",
+        ],
     ) -> list[Transform]:
         if mode == "cartesian":
             return _build_eva_bimanual_transform_list()
@@ -40,8 +40,8 @@ class Eva(Embodiment):
             return _build_eva_bimanual_eef_frame_transform_list(is_quat=True)
 
     @classmethod
-    def get_keymap(cls):
-        return {
+    def _get_keymap(cls, keymap_mode: str):
+        key_map = {
             cls.VIZ_IMAGE_KEY: {
                 "key_type": "camera_keys",
                 "zarr_key": "images.front_1",
@@ -91,6 +91,8 @@ class Eva(Embodiment):
                 "horizon": 45,
             },
         }
+
+        return key_map
 
 
 def _build_eva_bimanual_revert_eef_frame_transform_list(

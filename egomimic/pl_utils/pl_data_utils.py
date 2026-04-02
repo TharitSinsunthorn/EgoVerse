@@ -1,4 +1,6 @@
 import logging
+import random
+from typing import Literal
 
 from lightning import LightningDataModule
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
@@ -58,8 +60,24 @@ class MultiDataModuleWrapper(LightningDataModule):
         valid_dataloader_params: dict,
         collate_max_length=128,
         model_name="google/paligemma-3b-mix-224",
+        sampling_mode: Literal["first", "random"] = "random",
+        annotation_key=None,
         use_tokenizer=False,
+        default_prompt="",
     ):
+        """
+        Args:
+            train_datasets: dictionary of train datasets
+            valid_datasets: dictionary of valid datasets
+            train_dataloader_params: dictionary of train dataloader parameters
+            valid_dataloader_params: dictionary of valid dataloader parameters
+            model_name: name of the model to use for the tokenizer
+            sampling_mode: "first" to sample the first prompt from the list of prompts, "random" to sample a random prompt from the list of prompts
+            annotation_key: key of the annotation to use for the collate function
+            use_tokenizer: whether to use the tokenizer to tokenize the prompts
+            default_prompt: default prompt to use if the annotation key is not found
+            collate_max_length: maximum length of the tokenized prompts
+        """
         super().__init__()
         self.train_datasets = train_datasets
         self.valid_datasets = valid_datasets
@@ -69,6 +87,9 @@ class MultiDataModuleWrapper(LightningDataModule):
             self.collate_fn = build_tokenized_collate(
                 max_length=collate_max_length,
                 model_name=model_name,
+                sampling_mode=sampling_mode,
+                annotation_key=annotation_key,
+                default_prompt=default_prompt,
             )
         else:
             self.collate_fn = annotation_collate
@@ -198,6 +219,8 @@ class DataModuleWrapper(LightningDataModule):
         valid_dataloader_params,
         collate_max_length=128,
         model_name="google/paligemma-3b-mix-224",
+        sampling_mode: Literal["first", "random"] = "random",
+        annotation_key=None,
     ):
         """
         Args:
@@ -211,6 +234,8 @@ class DataModuleWrapper(LightningDataModule):
         self.collate_fn = build_tokenized_collate(
             max_length=collate_max_length,
             model_name=model_name,
+            sampling_mode=sampling_mode,
+            annotation_key=annotation_key,
         )
 
     def train_dataloader(self):
@@ -241,6 +266,10 @@ def _extract_list_keys(batch):
     return {k: [sample.pop(k) for sample in batch] for k in list_keys}
 
 
+def _extract_keys(batch, keys):
+    return {k: [sample.pop(k) for sample in batch] for k in keys}
+
+
 def annotation_collate(batch):
     """Collate that preserves variable-length list-valued keys (e.g. annotation_keys)."""
     extracted = _extract_list_keys(batch)
@@ -249,24 +278,36 @@ def annotation_collate(batch):
     return collated
 
 
-def build_tokenized_collate(max_length=128, model_name="google/paligemma-3b-mix-224"):
+def build_tokenized_collate(
+    max_length=128,
+    model_name="google/paligemma-3b-mix-224",
+    sampling_mode: Literal["first", "random"] = "random",
+    annotation_key="annotations",
+    default_prompt="",
+):
     """Return a collate_fn closure that tokenizes the annotations field."""
 
     tok = AutoTokenizer.from_pretrained(model_name)
 
     def _collate(batch):
-        if "annotations" not in batch[0]:
-            return default_collate(batch)
-
         # Ensure annotations are always strings (no None) before collating/tokenizing
-        sanitized_batch = []
-        for sample in batch:
-            sample_copy = dict(sample)
-            ann = sample_copy.get("annotations")
-            sample_copy["annotations"] = "" if ann is None else str(ann)
-            sanitized_batch.append(sample_copy)
+        list_keys = _extract_list_keys(batch)
 
-        prompts = [sample["annotations"] for sample in sanitized_batch]
+        if annotation_key is None:
+            annotation = {}
+            prompts = [default_prompt] * len(batch)
+        else:
+            if annotation_key not in batch[0]:
+                raise KeyError(f"Annotation key {annotation_key} not found in batch")
+            annotation = _extract_keys(batch, [annotation_key])
+            prompts = []
+            for sample in annotation[annotation_key]:
+                if len(sample) == 0:
+                    prompts.append(default_prompt)
+                elif sampling_mode == "random":
+                    prompts.append(sample[random.randint(0, len(sample) - 1)])
+                elif sampling_mode == "first":
+                    prompts.append(sample[0])
 
         enc = tok(
             prompts,
@@ -276,7 +317,9 @@ def build_tokenized_collate(max_length=128, model_name="google/paligemma-3b-mix-
             return_tensors="pt",
         )
 
-        collated = default_collate(sanitized_batch)
+        collated = default_collate(batch)
+        collated.update(annotation)
+        collated.update(list_keys)
         attention_mask = enc["attention_mask"].bool()
         token_loss_mask = attention_mask.clone()
         token_loss_mask[:, -1] = False

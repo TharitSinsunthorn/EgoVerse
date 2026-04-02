@@ -39,6 +39,8 @@ class PickPlaceLLMConverter(LLMConverter):
         annotations = annotation_dict["annotations"]
         zarr_annotations_list = []
         for annotation in annotations:
+            if "label" not in annotation:
+                continue
             arm = annotation["label"].split(" ")[0].lower()
             clips = annotation["clips"]
             for clip in clips:

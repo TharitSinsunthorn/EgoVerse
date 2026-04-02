@@ -1,7 +1,25 @@
+"""
+Sample Viz Command:
+python egomimic/trainHydra.py -m \
+  --config-path=logs/eva/71_max_autotune_2026-04-02_19-27-55/ \
+  --config-name=multirun \
+  trainer=viz \
+  ckpt_path=logs/eva/71_max_autotune_2026-04-02_19-27-55/0/checkpoints/last.ckpt \
+  launch_params.nodes=1 \
+  launch_params.gpus_per_node=1
+
+python egomimic/trainHydra.py \
+  --config-path=/storage/home/hcoda1/4/paphiwetsa3/r-dxu345-0/projects/EgoVerse/logs/eva/71_max_autotune_2026-04-02_19-27-55/ \
+  --config-name=multirun \
+  hydra.searchpath=[file:///storage/home/hcoda1/4/paphiwetsa3/r-dxu345-0/projects/EgoVerse/egomimic/hydra_configs] \
+  +trainer=viz \
+  ++logger=debug \
+  +ckpt_path=/storage/home/hcoda1/4/paphiwetsa3/r-dxu345-0/projects/EgoVerse/logs/eva/71_max_autotune_2026-04-02_19-27-55/0/checkpoints/last.ckpt
+"""
+
 import copy
 import os
 import signal
-from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
@@ -120,20 +138,15 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     # TODO: deprecate shape inference in favor of LeRobotDatasetMetadata
     # NOTE: We assume that each dataset is of a unique embodiment. Multi-task datasets should be wrapped around TODO: MultiRLDBDataset
-
     for dataset_name, dataset in datamodule.train_datasets.items():
         log.info(f"Inferring shapes for dataset <{dataset_name}>")
         data_schematic.infer_shapes_from_batch(dataset[0])
-        # instantiate norm datasets which is same as dataset but with keymap without the image keys
         instantiate_copy = copy.deepcopy(cfg.data.train_datasets[dataset_name])
         keymap_cfg = instantiate_copy.resolver.key_map
         km = OmegaConf.to_container(keymap_cfg, resolve=False)  # plain dict
 
-        km = {
-            k: v
-            for k, v in km.items()
-            if not (isinstance(v, Mapping) and v.get("key_type") == "camera_keys")
-        }
+        # this remove annotation and image keys from the keymap
+        km["norm_mode"] = True
 
         instantiate_copy.resolver.key_map = km
         norm_dataset = hydra.utils.instantiate(instantiate_copy)
@@ -220,7 +233,12 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     if cfg.get("train"):
         log.info("Starting training!")
-        trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path"))
+        trainer.fit(
+            model=model,
+            datamodule=datamodule,
+            ckpt_path=cfg.get("ckpt_path"),
+            weights_only=False,
+        )
 
     if cfg.get("eval"):
         eval: Eval = hydra.utils.instantiate(

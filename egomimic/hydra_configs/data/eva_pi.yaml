@@ -4,12 +4,11 @@ train_datasets:
     _target_: egomimic.rldb.zarr.zarr_dataset_multi.MultiDataset._from_resolver
     resolver:
       _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3EpisodeResolver
-      folder_path:  /storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets
+      folder_path: /storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets
       key_map:
         _target_: egomimic.rldb.embodiment.eva.Eva.get_keymap
       transform_list:
         _target_: egomimic.rldb.embodiment.eva.Eva.get_transform_list
-        mode: cartesian
     filters:
       _target_: egomimic.rldb.filters.DatasetFilter
       filter_lambdas:
@@ -21,12 +20,11 @@ valid_datasets:
     _target_: egomimic.rldb.zarr.zarr_dataset_multi.MultiDataset._from_resolver
     resolver:
       _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3EpisodeResolver
-      folder_path:  /storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets
+      folder_path: /storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets
       key_map:
         _target_: egomimic.rldb.embodiment.eva.Eva.get_keymap
       transform_list:
         _target_: egomimic.rldb.embodiment.eva.Eva.get_transform_list
-        mode: cartesian
     filters:
       _target_: egomimic.rldb.filters.DatasetFilter
       filter_lambdas:
@@ -35,9 +33,9 @@ valid_datasets:
 
 train_dataloader_params:
   eva_bimanual:
-    batch_size: 32
-    num_workers: 6
+    batch_size: 32 
+    num_workers: 10
 valid_dataloader_params:
   eva_bimanual:
     batch_size: 32
-    num_workers: 6
+    num_workers: 10

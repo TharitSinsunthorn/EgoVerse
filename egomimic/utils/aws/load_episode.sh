@@ -28,13 +28,13 @@ path="/home/ubuntu/eva_proc_download2"
 #   "s3://rldb/processed_v3/test_eva2/**" \
 #   "$path"
 
-eva_ID=1766773834183
+eva_ID=1773619568467
 # eva move hdf5
 # s5cmd --endpoint-url "$R2_ENDPOINT_URL" cp "s3://rldb/raw_v2/eva/${eva_ID}.hdf5" "s3://rldb/raw_v2/test_eva2/${eva_ID}.hdf5"
 
 s5cmd --endpoint-url "$R2_ENDPOINT_URL" cp \
     "s3://rldb/raw_v2/eva/${eva_ID}.hdf5" \
-    "/home/ubuntu/up_res_download/${eva_ID}.hdf5"
+    "/storage/project/r-dxu345-0/paphiwetsa3/projects/EgoVerse/test/${eva_ID}.hdf5"
 
 # Then upload to destination
 # s5cmd --endpoint-url "$R2_ENDPOINT_URL" cp \

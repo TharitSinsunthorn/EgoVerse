@@ -12,17 +12,17 @@ load_env()
 
 intrinsics_key = "base"
 
-key_map = Scale.get_keymap(mode="cartesian", annotations=True)
+key_map = Scale.get_keymap(keymap_mode="cartesian", annotation_key="annotations")
 transform_list = None
 
 resolver = S3EpisodeResolver(
-    folder_path="/coc/flash7/scratch/egoverseDebugDatasets/egoverseS3DatasetTest/",
+    folder_path="/storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets/",
     key_map=key_map,
     transform_list=transform_list,
 )
 
 filters = DatasetFilter(
-    filter_lambdas=["lambda row: row['episode_hash'] in {'2026-03-16-01-22-26-448000'}"]
+    filter_lambdas=["lambda row: row['episode_hash'] in {'2026-03-15-23-45-35-137000'}"]
 )
 
 cloudflare_ds = MultiDataset._from_resolver(
@@ -44,7 +44,7 @@ for i, batch in enumerate(loader):
 
 # save mp4
 
-writer = imageio.get_writer("ims_annotations.mp4", fps=30)
+writer = imageio.get_writer("sample_annotation.mp4", fps=30)
 for frame in ims_annotations:
     writer.append_data(frame)
 writer.close()

@@ -1,0 +1,34 @@
+_target_: egomimic.pl_utils.pl_data_utils.MultiDataModuleWrapper
+train_datasets:
+  eva_bimanual:
+    filters:
+      _target_: egomimic.rldb.filters.ScaleAnnotationDatasetFilter
+      project_name: "dense-language"
+      filter_lambdas:
+        - "lambda row: (row['robot_name'] == 'eva_bimanual') & (row['task'] == 'pick_place') & (row['zarr_processed_path'] != '')"
+  aria_bimanual:
+    filters:
+      _target_: egomimic.rldb.filters.ScaleAnnotationDatasetFilter
+      project_name: "dense-language"
+      filter_lambdas:
+        - "lambda row: (row['robot_name'] == 'aria_bimanual') & (row['task'] == 'pick_place') & (row['zarr_processed_path'] != '')"
+
+valid_datasets:
+  eva_bimanual:
+    filters:
+      _target_: egomimic.rldb.filters.ScaleAnnotationDatasetFilter
+      project_name: "dense-language"
+      filter_lambdas:
+        - "lambda row: (row['robot_name'] == 'eva_bimanual') & (row['task'] == 'pick_place') & (row['zarr_processed_path'] != '')"
+  aria_bimanual:
+    filters:
+      _target_: egomimic.rldb.filters.ScaleAnnotationDatasetFilter
+      project_name: "dense-language"
+      filter_lambdas:
+        - "lambda row: (row['robot_name'] == 'aria_bimanual') & (row['task'] == 'pick_place') & (row['zarr_processed_path'] != '')"
+
+use_tokenizer: true
+model_name: "google/paligemma-3b-mix-224"
+sampling_mode: "random"
+annotation_key: "annotations"
+default_prompt: "this is a bad action"

@@ -171,12 +171,13 @@ class PI(Algo):
                 if key_name is not None:
                     processed_batch[embodiment_id][key_name] = value
 
-            # Carry through language tokenization tensors produced by collate_fn
+            # Carry through language tokenization tensors and annotations produced by collate_fn
             for tk in (
                 "tokenized_prompt",
                 "tokenized_mask",
                 "token_loss_mask",
                 "token_ar_mask",
+                "annotations",
             ):
                 if tk in _batch:
                     processed_batch[embodiment_id][tk] = _batch[tk]
@@ -470,16 +471,16 @@ class PI(Algo):
             for k in images.keys()
         }
 
-        if not lang_keys:
-            tokenized_prompt, tokenized_prompt_mask, token_ar_mask, token_loss_mask = (
-                _empty_lang_placeholders(B, device)
-            )
-
-        else:
+        has_lang = "tokenized_prompt" in batch and batch["tokenized_prompt"].numel() > 0
+        if has_lang:
             tokenized_prompt = batch["tokenized_prompt"].to(device)
             tokenized_prompt_mask = batch["tokenized_mask"].to(device)
             token_ar_mask = batch["token_ar_mask"].to(device)
             token_loss_mask = batch["token_loss_mask"].to(device)
+        else:
+            tokenized_prompt, tokenized_prompt_mask, token_ar_mask, token_loss_mask = (
+                _empty_lang_placeholders(B, device)
+            )
 
         # ---- Wrap into simple observation (helpers) ----
         observation = _SimpleObservation(

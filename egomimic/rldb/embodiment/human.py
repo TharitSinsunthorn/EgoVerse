@@ -63,8 +63,8 @@ class Human(Embodiment):
         )
 
     @abstractmethod
-    def get_keymap(
-        cls, mode: Literal["cartesian", "keypoints"], annotations: bool = False
+    def _get_keymap(
+        cls, mode: Literal["cartesian", "keypoints"], annotation_key: str = None
     ):
         pass
 
@@ -150,17 +150,14 @@ class Aria(Human):
             return _build_aria_keypoints_eef_frame_transform_list(
                 stride=cls.ACTION_STRIDE, is_quat=True
             )
-        else:
-            raise ValueError(
-                f"Unsupported mode '{mode}'. Expected one of: 'cartesian', 'keypoints_headframe_ypr', 'keypoints_headframe_quat', 'keypoints_wristframe_ypr', 'keypoints_wristframe_quat'."
-            )
 
     @classmethod
-    def get_keymap(
-        cls, mode: Literal["cartesian", "keypoints"], annotations: bool = False
+    def _get_keymap(
+        cls,
+        keymap_mode: Literal["cartesian", "keypoints"],
     ):
-        if mode == "cartesian":
-            key_map = {
+        if keymap_mode == "cartesian":
+            return {
                 cls.VIZ_IMAGE_KEY: {
                     "key_type": "camera_keys",
                     "zarr_key": "images.front_1",
@@ -188,8 +185,8 @@ class Aria(Human):
                     "zarr_key": "obs_head_pose",
                 },
             }
-        elif mode == "keypoints":
-            key_map = {
+        elif keymap_mode == "keypoints":
+            return {
                 cls.VIZ_IMAGE_KEY: {
                     "key_type": "camera_keys",
                     "zarr_key": "images.front_1",
@@ -235,16 +232,6 @@ class Aria(Human):
                     "zarr_key": "obs_head_pose",
                 },
             }
-        else:
-            raise ValueError(
-                f"Unsupported mode '{mode}'. Expected one of: 'cartesian', 'keypoints'."
-            )
-        if annotations:
-            key_map["annotations"] = {
-                "key_type": "annotation_keys",
-                "zarr_key": "annotations",
-            }
-        return key_map
 
 
 class Scale(Human):
@@ -262,11 +249,12 @@ class Scale(Human):
             )
 
     @classmethod
-    def get_keymap(
-        cls, mode: Literal["cartesian", "keypoints"], annotations: bool = False
+    def _get_keymap(
+        cls,
+        keymap_mode: Literal["cartesian", "keypoints"],
     ):
-        if mode == "cartesian":
-            key_map = {
+        if keymap_mode == "cartesian":
+            return {
                 cls.VIZ_IMAGE_KEY: {
                     "key_type": "camera_keys",
                     "zarr_key": "images.front_1",
@@ -290,8 +278,8 @@ class Scale(Human):
                     "zarr_key": "left.obs_ee_pose",
                 },
             }
-        elif mode == "keypoints":
-            key_map = {
+        elif keymap_mode == "keypoints":
+            return {
                 cls.VIZ_IMAGE_KEY: {
                     "key_type": "camera_keys",
                     "zarr_key": "images.front_1",
@@ -333,16 +321,6 @@ class Scale(Human):
                     "zarr_key": "right.obs_wrist_pose",
                 },
             }
-        else:
-            raise ValueError(
-                f"Unsupported mode '{mode}'. Expected one of: 'cartesian', 'keypoints'."
-            )
-        if annotations:
-            key_map["annotations"] = {
-                "key_type": "annotation_keys",
-                "zarr_key": "annotations",
-            }
-        return key_map
 
 
 class Mecka(Human):

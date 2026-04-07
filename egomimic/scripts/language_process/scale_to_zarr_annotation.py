@@ -2,21 +2,18 @@
 Example usage:
 python egomimic/scripts/language_process/scale_to_zarr_annotation.py \
 --scale-annotation-dir annotations_test \
---dataset-config-path egomimic/hydra_configs/data/scale.yaml \
+--dataset-config-path egomimic/hydra_configs/data/eva_pi_lang.yaml \
 --conversion-mode pick_place_llm \
 --prompt-filepath egomimic/scripts/language_process/prompt.txt \
 --project-name "dense-language"
 """
 
 import argparse
-import json
 import os
 from subprocess import run
-from typing import Any
 
 import hydra
 import pandas as pd
-import requests
 from omegaconf import OmegaConf
 from scaleapi import ScaleClient
 
@@ -25,84 +22,11 @@ from egomimic.scripts.language_process.converter import (
     HardCodedConverter,
     PickPlaceLLMConverter,
 )
-
-REQUEST_TIMEOUT_S = 60
-
-
-def get_completed_tasks(project_name: str, api_key: str) -> list[dict[str, Any]]:
-    """Fetch all completed tasks for a project."""
-    headers = {"accept": "application/json"}
-    base_url = "https://api.scale.com/v1/tasks"
-
-    next_token = None
-    tasks: list[dict[str, Any]] = []
-
-    while True:
-        params = {  # TODO: fetch all tasks included non completed tasks after scale explained how this is done
-            "project": project_name,
-            "include_attachment_url": "true",
-            "limit": 100,
-        }
-        if next_token:
-            params["next_token"] = next_token
-
-        response = requests.get(
-            base_url,
-            headers=headers,
-            params=params,
-            auth=(api_key, ""),
-            timeout=REQUEST_TIMEOUT_S,
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        tasks.extend(data.get("docs", []))
-
-        next_token = data.get("next_token")
-        if not next_token:
-            break
-
-    return tasks
-
-
-def get_episode_hash(task: dict[str, Any]) -> str:
-    """Extract episode hash from task['params']['attachments'][0]."""
-    attachment = task["params"]["attachments"][0]
-    # Example:
-    # s3://scale-sales-uploads/egoverse/2026-03-17-01-42-37-000000/2026-03-17-01-42-37-000000.mp4
-    return attachment.rstrip("/").split("/")[-2]
-
-
-def build_df_from_tasks(
-    tasks: list[dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """Build a lookup from episode_hash -> task."""
-
-    df = pd.DataFrame(columns=["_ID", "STATUS", "S3_ATTACHMENT", "SEQUENCE_ID"])
-    for task in tasks:
-        attachments = task.get("params", {}).get("attachments", [])
-        if not attachments:
-            continue
-
-        episode_hash = get_episode_hash(task)
-        df = pd.concat(
-            [
-                df,
-                pd.DataFrame(
-                    [
-                        {
-                            "_ID": task["task_id"],
-                            "STATUS": task["status"],
-                            "S3_ATTACHMENT": attachments[0],
-                            "SEQUENCE_ID": episode_hash,
-                        }
-                    ]
-                ),
-            ],
-            ignore_index=True,
-        )
-
-    return df
+from egomimic.utils.scale_utils import (
+    build_df_from_tasks,
+    download_scale_annotation,
+    get_tasks,
+)
 
 
 def download_scale_annotation_csv(dest_path: str):
@@ -120,17 +44,6 @@ def load_scale_annotation_csv(csv_path: str):
 def get_available_hashes(df: pd.DataFrame):
     df = df[df["STATUS"] == "completed"]
     return df["SEQUENCE_ID"].unique().tolist()
-
-
-def download_scale_annotation(client: ScaleClient, tid: str, out_path: str):
-    task = client.get_task(tid)
-    url = task.response["annotations"]["url"]
-    resp = requests.get(url, timeout=60)
-    resp.raise_for_status()
-    raw = json.loads(resp.text.rstrip("\x00"))
-    path = os.path.join(out_path, f"{tid}.json")
-    with open(path, "w") as f:
-        json.dump(raw, f, indent=2)
 
 
 def get_tid_to_episode_hash(df: pd.DataFrame, tid: str):
@@ -161,7 +74,7 @@ if __name__ == "__main__":
     os.makedirs(args.scale_annotation_dir, exist_ok=True)
 
     if args.project_name:
-        completed_tasks = get_completed_tasks(args.project_name, args.scale_api_key)
+        completed_tasks = get_tasks(args.project_name, args.scale_api_key)
         df = build_df_from_tasks(completed_tasks)
     else:
         csv_path = download_scale_annotation_csv(args.scale_annotation_dir)
@@ -214,6 +127,8 @@ if __name__ == "__main__":
     for dataset_name in train_datasets:
         for episode_hash, zarr_dataset in train_datasets[dataset_name].datasets.items():
             tid = get_episode_hash_to_tid(df, episode_hash)
+            if tid is None:
+                continue
             annotation = converter.convert(tid)
             writer = ZarrWriter(
                 episode_path=zarr_dataset.episode_path,
@@ -226,6 +141,8 @@ if __name__ == "__main__":
     for dataset_name in valid_datasets:
         for episode_hash, zarr_dataset in valid_datasets[dataset_name].datasets.items():
             tid = get_episode_hash_to_tid(df, episode_hash)
+            if tid is None:
+                continue
             annotation = converter.convert(tid)
             writer = ZarrWriter(
                 episode_path=zarr_dataset.episode_path,

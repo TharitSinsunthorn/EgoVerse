@@ -42,3 +42,4 @@ external/scale/scripts/scale_data/
 .codex
 annotations/**
 annotations_test/**
+log_conversion/**

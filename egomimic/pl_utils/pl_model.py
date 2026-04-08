@@ -1,4 +1,5 @@
 import random
+import time
 from collections import OrderedDict, deque
 from typing import Any, Dict
 
@@ -87,10 +88,37 @@ class ModelWrapper(LightningModule):
     def training_step(self, batch, batch_idx):
         self.train()
         loss_dicts = []
+
+        t0 = time.time()
         batch = self.model.process_batch_for_training(batch)
+        t1 = time.time()
         predictions = self.model.forward_training(batch)
+        t2 = time.time()
         losses = self.model.compute_losses(predictions, batch)
+        t3 = time.time()
         loss_dicts.append(losses)
+
+        self.log(
+            "Timing/Process_Batch_Sec",
+            t1 - t0,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+        self.log(
+            "Timing/Forward_Pass_Sec",
+            t2 - t1,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+        self.log(
+            "Timing/Compute_Losses_Sec",
+            t3 - t2,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
 
         # Average over both the hand and robot batch if applicable
         losses = OrderedDict()

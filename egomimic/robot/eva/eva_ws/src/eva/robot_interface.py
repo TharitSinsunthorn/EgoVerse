@@ -61,6 +61,11 @@ class Robot_Interface(ABC):
             # Match X5A URDF link names
         self.robot_config.base_link_name = "base_link"
         self.robot_config.eef_link_name = "link6"
+        # Raise gripper torque limit so the torque protection (triggered at
+        # gripper_torque_max/2) doesn't freeze the close command before the
+        # gripper reaches position zero.  Default 1.5 Nm gives only a 0.75 Nm
+        # threshold — lower than the ~1 Nm the motor draws closing from open.
+        self.robot_config.gripper_torque_max = 4.0
 
         self.controller_config = arx5.ControllerConfigFactory.get_instance().get_config(
             "joint_controller", self.robot_config.joint_dof
@@ -150,8 +155,8 @@ class ARXInterface(Robot_Interface):
             # kd = zeros
             gain.kp()[:] = kp
             gain.kd()[:] = kd
-            gain.gripper_kp = 1.0
-            gain.gripper_kd = 0.1
+            gain.gripper_kp = 5.0
+            gain.gripper_kd = 0.2
 
             self.ts_offset = 0.2
 
@@ -159,9 +164,15 @@ class ARXInterface(Robot_Interface):
 
             self.gripper_offset = 0.000
 
-        self.gripper_open = self.cfg.get("gripper_open", 0.08)
-        self.gripper_close = self.cfg.get("gripper_close", -0.018)
-        self.gripper_width = self.gripper_open - self.gripper_close
+        gripper_cfg = self.cfg.get("gripper", {})
+        self.gripper_open = {}
+        self.gripper_close = {}
+        self.gripper_width = {}
+        for arm in self.arms:
+            arm_cfg = gripper_cfg.get(arm, {})
+            self.gripper_open[arm] = arm_cfg.get("open", 0.08)
+            self.gripper_close[arm] = arm_cfg.get("close", 0.0)
+            self.gripper_width[arm] = self.gripper_open[arm] - self.gripper_close[arm]
 
     def __create_cam_recorders(self, cameras_cfg):
         if AriaRecorder is None or RealSenseRecorder is None:
@@ -218,7 +229,9 @@ class ARXInterface(Robot_Interface):
         )
 
         # Denormalize gripper from [0, 1] to hardware range
-        gripper_cmd = float(gripper_cmd) * self.gripper_width + self.gripper_close
+        gripper_cmd = (
+            float(gripper_cmd) * self.gripper_width[arm] + self.gripper_close[arm]
+        )
         requested.gripper_pos = gripper_cmd
         requested.gripper_vel = 0.1
         requested.gripper_torque = 0.2
@@ -287,7 +300,7 @@ class ARXInterface(Robot_Interface):
         joints = self.controller[arm].get_joint_state()
         arm_joints = joints.pos()
         gripper_raw = getattr(joints, "gripper_pos", 0.0)
-        gripper = (gripper_raw - self.gripper_close) / self.gripper_width
+        gripper = (gripper_raw - self.gripper_close[arm]) / self.gripper_width[arm]
         joints = np.array(
             [
                 arm_joints[0],
@@ -497,6 +510,6 @@ class OfflineARXInterface:
 if __name__ == "__main__":
     # Run Eva example
     # Note: Update the URDF path before running
-    ri = ARXInterface(arms=["left"])
-    joints = ri.get_joints("left")
+    ri = ARXInterface(arms=["right"])
+    joints = ri.get_joints("right")
     breakpoint()

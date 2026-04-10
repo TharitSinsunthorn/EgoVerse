@@ -120,6 +120,7 @@ void Arx5JointController::calibrate_gripper()
         can_handle_.send_DM_motor_cmd(robot_config_.gripper_motor_id, 0, 0, 0, 0, 0);
         usleep(400);
     }
+    sleep_ms(200); // Wait for motor responses to arrive at receiver thread
     std::array<OD_Motor_Msg, 10> motor_msg = can_handle_.get_motor_msg();
     std::cout << "Fully-open joint position readout: " << motor_msg[robot_config_.gripper_motor_id].angle_actual_rad
               << std::endl;

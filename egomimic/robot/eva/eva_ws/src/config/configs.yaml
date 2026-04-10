@@ -5,28 +5,31 @@ interfaces:
   left: can1
   right: can2
 ts_offset: 0.4
-
-gripper_open: 0.08
-gripper_close: -0.018
-
+gripper:
+  left:
+    open: 0.09445506587172998
+    close: -0.0005234612358940971
+  right:
+    open: 0.09594861425534644
+    close: 0.0
 cameras:
-  front_img_1: 
-    type: "aria"
+  front_img_1:
+    type: aria
     enabled: true
-    encoding: "rgb8"
+    encoding: rgb8
     width: 960
     height: 720
   left_wrist_img:
-    type: "d405"
+    type: d405
     enabled: true
-    encoding: "rgb8"
+    encoding: rgb8
     serial_number: 218622279810
     width: 640
     height: 480
   right_wrist_img:
-    type: "d405"
+    type: d405
     enabled: true
-    encoding: "rgb8"
+    encoding: rgb8
     serial_number: 230322277025
     width: 640
     height: 480

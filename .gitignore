@@ -45,3 +45,7 @@ annotations_test/**
 log_conversion/**
 debug_model_inputs/**
 temp_dir/**
+aws/**
+coc/**
+local_data/**
+CLAUDE.md

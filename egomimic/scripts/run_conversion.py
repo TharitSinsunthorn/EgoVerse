@@ -413,9 +413,9 @@ def main():
     )
     p.add_argument(
         "--episode-hash",
-        action="append",
+        nargs="+",
         dest="episode_hashes",
-        help="Episode hash to process. Can be specified multiple times to process multiple episodes.",
+        help="Episode hashes to process. Separate multiple hashes with spaces.",
     )
     p.add_argument("--debug", action="store_true")
     args = p.parse_args()

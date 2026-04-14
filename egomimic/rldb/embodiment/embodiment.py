@@ -41,8 +41,17 @@ def get_embodiment(index):
     return EMBODIMENT_ID_TO_KEY.get(index, None)
 
 
+_EMBODIMENT_ALIASES = {
+    "SCALE": "SCALE_BIMANUAL",
+    "EVA": "EVA_BIMANUAL",
+    "ARIA": "ARIA_BIMANUAL",
+    "MECKA": "MECKA_BIMANUAL",
+}
+
+
 def get_embodiment_id(embodiment_name):
     embodiment_name = embodiment_name.upper()
+    embodiment_name = _EMBODIMENT_ALIASES.get(embodiment_name, embodiment_name)
     return EMBODIMENT[embodiment_name].value
 
 

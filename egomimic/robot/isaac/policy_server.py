@@ -270,7 +270,7 @@ def parse_args():
     parser.add_argument(
         "--resampled-action-len",
         type=int,
-        default=45,
+        default=100,
         help="Downsample predicted action chunk to this length.",
     )
     parser.add_argument(

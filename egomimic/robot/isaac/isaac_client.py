@@ -102,6 +102,13 @@ class SimRobot:
         right_cam_path: str = "/World/X5A_R/cam_bracket/cam_wrist/Camera",
         camera_resolution: tuple = (640, 480),
     ):
+        """Load arm articulations and cameras from an already-opened USD stage.
+
+        Adds each arm Robot to the World scene, attaches Camera sensors at the
+        given prim paths, resets the world, and builds DOF index maps used by
+        apply_joints / _get_joints.  Raises ValueError if any camera prim is
+        absent from the stage.
+        """
         from omni.isaac.core.robots import Robot
         from omni.isaac.sensor import Camera
 
@@ -222,6 +229,7 @@ class SimRobot:
             self._world.step(render=True)
 
     def step(self, render: bool = True):
+        """Advance the physics simulation by one step, optionally rendering."""
         self._world.step(render=render)
 
     def align_egocam_to_hardware(self):
@@ -369,6 +377,11 @@ class SimRobot:
 
     @staticmethod
     def _render_bgr(cam) -> np.ndarray:
+        """Render one camera frame as a BGR uint8 array [H, W, 3].
+
+        Handles float [0,1] and float [0,255] RGBA output from Isaac Sim Camera,
+        and returns a black frame if the camera has not yet produced data.
+        """
         rgba = cam.get_rgba()
         if rgba is None:
             h, w = cam.get_resolution()
@@ -387,6 +400,7 @@ class SimRobot:
 # ZMQ helpers
 # -----------------------------------------------------------------------
 def zmq_ping(socket, timeout_ms: int = 5000) -> bool:
+    """Send a ping to the policy server and return True if it replies ok within timeout_ms."""
     socket.send(pickle.dumps({"cmd": "ping"}))
     if socket.poll(timeout_ms):
         return pickle.loads(socket.recv()).get("status") == "ok"
@@ -394,16 +408,19 @@ def zmq_ping(socket, timeout_ms: int = 5000) -> bool:
 
 
 def zmq_reset(socket):
+    """Tell the policy server to reset its internal episode state."""
     socket.send(pickle.dumps({"cmd": "reset"}))
     pickle.loads(socket.recv())
 
 
 def zmq_set_extrinsics(socket, extrinsics: dict):
+    """Send camera-to-base extrinsics ({"left": 4x4, "right": 4x4}) to the policy server."""
     socket.send(pickle.dumps({"cmd": "set_extrinsics", "extrinsics": extrinsics}))
     pickle.loads(socket.recv())
 
 
 def zmq_step(socket, step_i: int, obs: dict):
+    """Send one observation to the policy server and return the action array, or None on error."""
     socket.send(pickle.dumps({"cmd": "step", "step_i": step_i, "obs": obs}))
     reply = pickle.loads(socket.recv())
     if "error" in reply:
@@ -419,6 +436,10 @@ def zmq_step(socket, step_i: int, obs: dict):
 # Main loop
 # -----------------------------------------------------------------------
 def _apply_action(robot: SimRobot, action: np.ndarray, arms: str):
+    """Unpack a flat action vector and drive the corresponding arm(s).
+
+    action layout: [left 7] for single arm, [left 7, right 7] for both.
+    """
     arms_list = ["left", "right"] if arms == "both" else [arms]
     for arm in arms_list:
         off = 7 if (arm == "right" and arms == "both") else 0
@@ -426,6 +447,10 @@ def _apply_action(robot: SimRobot, action: np.ndarray, arms: str):
 
 
 def main(args):
+    """Connect to the policy server, load the USD scene, and run the rollout loop.
+
+    Exits via os._exit(0) on completion to avoid Isaac Sim's Py_FinalizeEx crash.
+    """
     arms_list = ["left", "right"] if args.arms == "both" else [args.arms]
 
     # ---- Connect to policy server ----
@@ -472,9 +497,13 @@ def main(args):
         step_i = 0
 
         while simulation_app.is_running():
+            # Physics advances + cameras render
             robot.step(render=True)
+            # Collect current state
             obs = robot.get_obs()
+            # Send obs, block for action
             action = zmq_step(socket, step_i, obs)
+            # send joint target to sim
             if action is not None:
                 _apply_action(robot, action, args.arms)
             step_i += 1

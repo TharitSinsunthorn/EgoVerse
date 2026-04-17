@@ -19,16 +19,12 @@ Terminal 2 (ego_sim env):
         --usd-path /home/tharit/eva_ws/EVA_room.usd \\
         --arms both --cartesian
 
---- First run: check joint names ---
-    python egomimic/robot/isaac/isaac_client.py \\
-        --usd-path /home/tharit/eva_ws/EVA_room.usd --print-dofs
-
 --- USD structure (discovered) ---
   /World/X5A_L   left arm  articulation  — DOFs: joint1..joint6, joint7, joint8
   /World/X5A_R   right arm articulation  — DOFs: joint1..joint6, joint7, joint8
   joint1-joint6 = arm joints
   joint7+joint8 = two gripper fingers (commanded together)
-  /World/Eva/egocentric/ego_cam                      front/ego camera (USD path /World/egocentric/ego_cam, prefixed by our /World/Eva reference)
+  /World/egocentric/ego_cam                      front/ego camera (USD path /World/egocentric/ego_cam, prefixed by our /World/Eva reference)
   /World/X5A_L/cam_bracket/cam_wrist/Camera       left wrist camera
   /World/X5A_R/cam_bracket/cam_wrist/Camera       right wrist camera
 """
@@ -49,11 +45,10 @@ import zmq
 from omni.isaac.core import World
 from scipy.spatial.transform import Rotation as R
 
+
 # -----------------------------------------------------------------------
 # USD transform helper
 # -----------------------------------------------------------------------
-
-
 def _get_world_pose_se3(prim_path: str) -> np.ndarray:
     """Return 4x4 SE3 transform (column-vector convention) for a prim path.
 
@@ -76,8 +71,6 @@ def _get_world_pose_se3(prim_path: str) -> np.ndarray:
 # -----------------------------------------------------------------------
 # SimRobot  — two separate articulations, one per arm
 # -----------------------------------------------------------------------
-
-
 class SimRobot:
     """
     Minimal Isaac Sim wrapper for the EVA bimanual robot.
@@ -108,7 +101,6 @@ class SimRobot:
         left_cam_path: str = "/World/X5A_L/cam_bracket/cam_wrist/Camera",
         right_cam_path: str = "/World/X5A_R/cam_bracket/cam_wrist/Camera",
         camera_resolution: tuple = (640, 480),
-        skip_cameras: bool = False,
     ):
         from omni.isaac.core.robots import Robot
         from omni.isaac.sensor import Camera
@@ -127,31 +119,29 @@ class SimRobot:
             self._world.scene.add(robot)
             self._robots[arm] = robot
 
-        # ---- Cameras (skipped for --print-dofs to avoid crash) ----
+        # ---- Cameras ----
         self._cameras = {}
         self._cam_paths = {}  # key -> prim path string (for extrinsics)
-        if not skip_cameras:
-            import omni.usd
+        import omni.usd
 
-            stage = omni.usd.get_context().get_stage()
+        stage = omni.usd.get_context().get_stage()
 
-            W, H = camera_resolution
-            cam_specs = [("front_img_1", front_cam_path)]
-            if "left" in arms:
-                cam_specs.append(("left_wrist_img", left_cam_path))
-            if "right" in arms:
-                cam_specs.append(("right_wrist_img", right_cam_path))
+        W, H = camera_resolution
+        cam_specs = [("front_img_1", front_cam_path)]
+        if "left" in arms:
+            cam_specs.append(("left_wrist_img", left_cam_path))
+        if "right" in arms:
+            cam_specs.append(("right_wrist_img", right_cam_path))
 
-            for key, path in cam_specs:
-                prim = stage.GetPrimAtPath(path)
-                if not prim.IsValid():
-                    raise ValueError(
-                        f"\n[SimRobot] Camera prim not found: '{path}'\n"
-                        f"Run --print-cameras to list all Camera prims in the USD.\n"
-                        f"Then override with e.g. --front-cam-path /correct/path"
-                    )
-                self._cameras[key] = Camera(prim_path=path, resolution=(W, H))
-                self._cam_paths[key] = path
+        for key, path in cam_specs:
+            prim = stage.GetPrimAtPath(path)
+            if not prim.IsValid():
+                raise ValueError(
+                    f"\n[SimRobot] Camera prim not found: '{path}'\n"
+                    f"Then override with e.g. --front-cam-path /correct/path"
+                )
+            self._cameras[key] = Camera(prim_path=path, resolution=(W, H))
+            self._cam_paths[key] = path
 
         # ---- Initialize ----
         self._world.reset()
@@ -160,35 +150,16 @@ class SimRobot:
         for cam in self._cameras.values():
             cam.initialize()
 
-        if not skip_cameras:
-            for _ in range(5):
-                self._world.step(render=True)
+        for _ in range(5):
+            self._world.step(render=True)
 
         # ---- Build DOF index maps (per arm) ----
-        if not skip_cameras:
-            self._arm_indices = self._build_arm_indices()
-            self._gripper_indices = self._build_gripper_indices()
-
-    # ------------------------------------------------------------------
-    # Diagnostics
-    # ------------------------------------------------------------------
-
-    def print_dof_names(self):
-        print()
-        for arm, robot in self._robots.items():
-            names = list(robot.dof_names)
-            print(
-                f"[SimRobot] {arm.upper()} arm  ({self._arm_paths[arm]})  — {len(names)} DOFs:"
-            )
-            for i, n in enumerate(names):
-                print(f"  [{i:2d}]  {n}")
-        print(f"\nExpected arm joints   : {self.ARM_JOINT_NAMES}")
-        print(f"Expected gripper DOFs : {self.GRIPPER_JOINT_NAMES}")
+        self._arm_indices = self._build_arm_indices()
+        self._gripper_indices = self._build_gripper_indices()
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-
     def get_obs(self) -> dict:
         """
         Return obs dict for policy_server:
@@ -333,7 +304,6 @@ class SimRobot:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
-
     def _build_arm_indices(self) -> dict:
         """Map ARM_JOINT_NAMES to DOF indices for each arm's articulation."""
         indices = {}
@@ -416,8 +386,6 @@ class SimRobot:
 # -----------------------------------------------------------------------
 # ZMQ helpers
 # -----------------------------------------------------------------------
-
-
 def zmq_ping(socket, timeout_ms: int = 5000) -> bool:
     socket.send(pickle.dumps({"cmd": "ping"}))
     if socket.poll(timeout_ms):
@@ -450,8 +418,6 @@ def zmq_step(socket, step_i: int, obs: dict):
 # -----------------------------------------------------------------------
 # Main loop
 # -----------------------------------------------------------------------
-
-
 def _apply_action(robot: SimRobot, action: np.ndarray, arms: str):
     arms_list = ["left", "right"] if arms == "both" else [arms]
     for arm in arms_list:
@@ -461,23 +427,6 @@ def _apply_action(robot: SimRobot, action: np.ndarray, arms: str):
 
 def main(args):
     arms_list = ["left", "right"] if args.arms == "both" else [args.arms]
-
-    # ---- --print-dofs: no policy server needed ----
-    if args.print_dofs:
-        import omni.usd
-
-        omni.usd.get_context().open_stage(str(args.usd_path))
-        world = World(stage_units_in_meters=1.0)
-        robot = SimRobot(
-            arms=arms_list,
-            world=world,
-            scene_prim_path=args.scene_prim_path,
-            left_arm_path=args.left_arm_path,
-            right_arm_path=args.right_arm_path,
-            skip_cameras=True,
-        )
-        robot.print_dof_names()
-        os._exit(0)
 
     # ---- Connect to policy server ----
     context = zmq.Context()
@@ -512,10 +461,9 @@ def main(args):
             camera_resolution=(args.cam_width, args.cam_height),
         )
 
-        # ---- Send sim extrinsics to policy server (optional) ----
-        if args.use_sim_extrinsics:
-            print("[isaac_client] Computing extrinsics from sim camera poses...")
-            zmq_set_extrinsics(socket, robot.compute_extrinsics())
+        # ---- Send sim extrinsics to policy server ----
+        print("[isaac_client] Computing extrinsics from sim camera poses...")
+        zmq_set_extrinsics(socket, robot.compute_extrinsics())
 
         # ---- Rollout ----
         print("[isaac_client] Starting rollout. Ctrl-C or close window to stop.")
@@ -571,20 +519,6 @@ def parse_args():
     )
     p.add_argument("--cam-width", type=int, default=640)
     p.add_argument("--cam-height", type=int, default=480)
-
-    # Extrinsics
-    p.add_argument(
-        "--use-sim-extrinsics",
-        action="store_true",
-        help="Compute camera-to-base extrinsics from sim and send to server.",
-    )
-
-    # Diagnostic
-    p.add_argument(
-        "--print-dofs",
-        action="store_true",
-        help="Print DOF names for both arms and exit.",
-    )
 
     return p.parse_args()
 

@@ -1,7 +1,7 @@
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-import time
 import numpy as np
 import yaml
 from scipy.spatial.transform import Rotation as R
@@ -371,7 +371,7 @@ class OfflineARXInterface:
             raise FileNotFoundError(f"Offline episode path not found: {dataset_path}")
         return ZarrDataset(
             episode_path,
-            key_map=Eva.get_keymap(),
+            key_map=Eva.get_keymap(keymap_mode="cartesian"),
             transform_list=None,
         )
 

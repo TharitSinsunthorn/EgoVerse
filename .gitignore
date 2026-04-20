@@ -50,3 +50,4 @@ coc/**
 local_data/**
 CLAUDE.md
 external/openpi/
+debug/

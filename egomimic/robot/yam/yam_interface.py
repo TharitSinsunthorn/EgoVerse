@@ -42,7 +42,7 @@ except ImportError:
     GripperType = None
 
 
-class YAMInterface:
+class YAMArm:
     """Single YAM arm on one CAN channel."""
 
     def __init__(
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     parser.add_argument("--channel", default="can1")
     args = parser.parse_args()
 
-    with YAMInterface(channel=args.channel) as arm:
+    with YAMArm(channel=args.channel) as arm:
         print(f"num_dofs : {arm.num_dofs}")
         print(f"joints   : {arm.get_joints()}")
         print(f"pose_6d  : {arm.get_pose_6d()}")

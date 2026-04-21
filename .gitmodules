@@ -1,3 +1,6 @@
 [submodule "external/openpi"]
 	path = external/openpi
 	url = https://github.com/GaTech-RL2/openpi.git
+[submodule "external/i2rt"]
+	path = external/i2rt
+	url = https://github.com/i2rt-robotics/i2rt.git

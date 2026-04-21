@@ -1,45 +1,74 @@
+"""
+YAM-specific kinematics solvers.
+"""
+
+import os
+from typing import Optional
+
 import numpy as np
 
 from egomimic.robot.kinematics import MinkKinematicsSolver, TracKinematicsSolver
 
+_I2RT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "external", "i2rt")
+)
+YAM_URDF_PATH = os.path.join(_I2RT_ROOT, "i2rt/robot_models/arm/yam/yam.urdf")
+YAM_XML_PATH = os.path.join(_I2RT_ROOT, "i2rt/robot_models/arm/yam/yam.xml")
 
-class EvaTracKinematicsSolver(TracKinematicsSolver):
-    """
-    Eva-specific kinematics solver using TracIK.
 
-    This solver adds Eva-specific configurations and handles the dual gripper joints.
+def get_yam_combined_xml(
+    arm_variant: str = "yam",
+    gripper_variant: str = "linear_4310",
+    ee_mass: Optional[float] = None,
+    ee_inertia: Optional[np.ndarray] = None,
+) -> str:
+    """Produce the arm+gripper MJCF path using i2rt's combiner.
+
+    Returns a path to a temp XML file with the TCP site available.
     """
+    from i2rt.robots.utils import (
+        ArmType,
+        GripperType,
+        combine_arm_and_gripper_xml,
+    )
+
+    arm_type = ArmType[arm_variant.upper()]
+    gripper_type = GripperType[gripper_variant.upper()]
+    return combine_arm_and_gripper_xml(
+        arm_type,
+        gripper_type,
+        ee_mass=ee_mass,
+        ee_inertia=ee_inertia,
+    )
+
+
+class YAMTracKinematicsSolver(TracKinematicsSolver):
+    """TracIK solver for YAM. Uses the URDF; EEF defaults to link_6 (last
+    actuated link). Switch eef_link_name to a gripper link if a URDF for the
+    gripper is merged in."""
 
     def __init__(
         self,
-        urdf_path: str,
+        urdf_path: str = YAM_URDF_PATH,
+        eef_link_name: str = "link_6",
     ):
-        """
-        Initialize Eva kinematics solver.
-
-        Args:
-            urdf_path: Path to Eva's URDF file
-        """
         super().__init__(
             urdf_path=urdf_path,
             base_link_name="base_link",
-            eef_link_name="link6",
+            eef_link_name=eef_link_name,
             num_joints=6,
         )
-
         self.urdf_path = urdf_path
         self.base_transform = None
 
 
-class EvaMinkKinematicsSolver(MinkKinematicsSolver):
-    """
-    Eva-specific kinematics solver using mink.
+class YAMMinkKinematicsSolver(MinkKinematicsSolver):
+    """Mink (MuJoCo-based) IK solver for YAM.
 
-    This solver provides optimization-based IK for the Eva (ARX X5) robot arm
-    using the mink library built on MuJoCo.
+    Uses the combined arm+gripper XML so the EEF frame is the gripper TCP
+    site, which is what the policy's Cartesian actions are expressed in.
     """
 
-    # Joint names for ARX X5 arm
     JOINT_NAMES = [
         "joint1",
         "joint2",
@@ -49,46 +78,55 @@ class EvaMinkKinematicsSolver(MinkKinematicsSolver):
         "joint6",
     ]
 
-    # Conservative velocity limits (rad/s)
+    # Conservative per-joint velocity limits (rad/s). Tune from motor specs.
     DEFAULT_VELOCITY_LIMITS = {
         "joint1": 1.0,
         "joint2": 1.0,
         "joint3": 1.0,
         "joint4": 1.0,
-        "joint5": 1.0,
-        "joint6": 1.0,
+        "joint5": 1.5,
+        "joint6": 1.5,
     }
 
     def __init__(
         self,
-        model_path: str,
-        eef_link_name: str = "tcp_match_trac",
+        model_path: Optional[str] = None,
+        arm_variant: str = "yam",
+        gripper_variant: str = "linear_4310",
+        eef_link_name: Optional[str] = None,
         eef_frame_type: str = "site",
-        velocity_limits: dict = None,
+        velocity_limits: Optional[dict] = None,
         solver: str = "daqp",
         max_iterations: int = 100,
         position_tolerance: float = 1e-3,
         orientation_tolerance: float = 1e-3,
     ):
         """
-        Initialize Eva mink kinematics solver.
-
         Args:
-            model_path: Path to Eva's URDF/XML file (should be MuJoCo XML format)
-            eef_link_name: Name of end-effector frame (default: "gripper")
-            eef_frame_type: Type of frame - "site" or "body" (default: "site")
-            velocity_limits: Optional dict of joint velocity limits
-            solver: QP solver to use (default: "daqp")
-            max_iterations: Maximum IK iterations (default: 100)
-            position_tolerance: Position convergence tolerance in meters (default: 1e-3)
-            orientation_tolerance: Orientation convergence tolerance in radians (default: 1e-3)
+            model_path: Path to a pre-combined MuJoCo XML. If None, calls
+                i2rt's combine_arm_and_gripper_xml() to produce one.
+            arm_variant: "yam", "yam_pro", "yam_ultra", or "big_yam".
+            gripper_variant: gripper name under i2rt/robot_models/gripper/.
+            eef_link_name: EEF frame. If None, auto-selects to match i2rt
+                convention: "tcp_site" for yam_teaching_handle, "grasp_site"
+                otherwise. Grasp site is ~13.5cm forward of tcp and is the
+                point actions should target for normal grippers.
+            eef_frame_type: "site" (default) or "body".
         """
+        if model_path is None:
+            model_path = get_yam_combined_xml(arm_variant, gripper_variant)
+
+        if eef_link_name is None:
+            eef_link_name = (
+                "tcp_site" if gripper_variant == "yam_teaching_handle" else "grasp_site"
+            )
+
         if velocity_limits is None:
             velocity_limits = self.DEFAULT_VELOCITY_LIMITS.copy()
 
         super().__init__(
             model_path=model_path,
-            base_link_name="base_link",
+            base_link_name="world",
             eef_link_name=eef_link_name,
             num_joints=6,
             joint_names=self.JOINT_NAMES,
@@ -101,64 +139,39 @@ class EvaMinkKinematicsSolver(MinkKinematicsSolver):
         )
 
         self.model_path = model_path
+        self.arm_variant = arm_variant
+        self.gripper_variant = gripper_variant
         self.base_transform = None
 
     def set_base_transform(self, transform):
-        """
-        Set base transform for the robot (useful for mobile base).
-
-        Args:
-            transform: 4x4 transformation matrix
-        """
+        """Set a base-to-world transform for mobile-base deployments."""
         self.base_transform = transform
 
     def ik_with_retries(self, pos_xyz, rot_mat, cur_jnts, num_retries=3, dt=0.01):
-        """
-        Solve IK with multiple retries and different random seeds.
-
-        Args:
-            pos_xyz: Target position (3,)
-            rot_mat: Target rotation matrix (3, 3)
-            cur_jnts: Current joint values (6,)
-            num_retries: Number of retries with random perturbations
-            dt: Time step for integration
-
-        Returns:
-            solved_jnts: Solution joint values or None if all retries fail
-        """
-
-        # First try with current configuration
+        """Solve IK and verify via FK; retry with random seeds on failure."""
         result = self.ik(pos_xyz, rot_mat, cur_jnts, dt=dt)
 
-        # Verify the solution
         if result is not None:
-            # Check if solution is valid by computing FK
             fk_pos, fk_rot = self.fk(result)
             pos_error = np.linalg.norm(fk_pos - pos_xyz)
             rot_error = np.linalg.norm(fk_rot.as_matrix() - rot_mat)
-
             if (
                 pos_error < self.position_tolerance * 10
                 and rot_error < self.orientation_tolerance * 10
             ):
                 return result
 
-        # Try with random perturbations
-        for i in range(num_retries):
-            # Add small random perturbation to seed
-            perturbed_jnts = cur_jnts + np.random.randn(self.num_joints) * 0.1
-            result = self.ik(pos_xyz, rot_mat, perturbed_jnts, dt=dt)
-
+        for _ in range(num_retries):
+            perturbed = cur_jnts + np.random.randn(self.num_joints) * 0.1
+            result = self.ik(pos_xyz, rot_mat, perturbed, dt=dt)
             if result is not None:
                 fk_pos, fk_rot = self.fk(result)
                 pos_error = np.linalg.norm(fk_pos - pos_xyz)
                 rot_error = np.linalg.norm(fk_rot.as_matrix() - rot_mat)
-
                 if (
                     pos_error < self.position_tolerance * 10
                     and rot_error < self.orientation_tolerance * 10
                 ):
                     return result
 
-        # All retries failed
         return None

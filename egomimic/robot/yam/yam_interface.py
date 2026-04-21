@@ -178,9 +178,29 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--channel", default="can1")
+    parser.add_argument(
+        "--loop", action="store_true", help="Print joint + pose at 10 Hz until Ctrl-C."
+    )
     args = parser.parse_args()
 
-    with YAMArm(channel=args.channel) as arm:
+    arm = YAMArm(channel=args.channel)
+    try:
         print(f"num_dofs : {arm.num_dofs}")
-        print(f"joints   : {arm.get_joints()}")
-        print(f"pose_6d  : {arm.get_pose_6d()}")
+        if args.loop:
+            print("Reading at 10 Hz — Ctrl-C to stop.\n")
+            while True:
+                j = arm.get_joints()
+                p = arm.get_pose_6d()
+                print(
+                    f"joints  : {np.round(j, 4)}  |  pose_6d : {np.round(p, 4)}",
+                    end="\r",
+                )
+                time.sleep(0.1)
+        else:
+            print(f"joints   : {arm.get_joints()}")
+            print(f"pose_6d  : {arm.get_pose_6d()}")
+    except KeyboardInterrupt:
+        print()
+    finally:
+        time.sleep(0.2)  # let control thread finish before closing CAN socket
+        arm.close()

@@ -1,205 +1,115 @@
-# YAM / EgoVerse Setup + Demo Collection
+# YAM / EgoVerse Setup
 
-## 1. One-time host setup
+## 1. Python environment
 
-### 1.1. udev rules
-
-Create `/etc/udev/rules.d/99-eva.rules`:
+All EgoVerse commands run inside the `emimic` venv:
 
 ```bash
-# Right Arm
-SUBSYSTEM=="tty", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="117e", ATTRS{serial}=="2077387F3430", SYMLINK+="eva_right_can"
-
-# Left Arm
-SUBSYSTEM=="tty", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="117e", ATTRS{serial}=="206634925741", SYMLINK+="eva_left_can"
+source emimic/bin/activate
 ```
 
-Replace the `serial` values with your own device serial numbers, then reload:
+### 1.1. Install i2rt and CAN dependencies (one-time)
 
 ```bash
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-```
-
-### 1.2. Bash alias for both arms
-
-Add this to `~/.bashrc`:
-
-```bash
-alias can-both='  sudo pkill slcand;   sudo ip link delete can1 2>/dev/null;   sudo ip link delete can2 2>/dev/null;   sudo slcand -o -s8 /dev/eva_left_can can1 &   sudo slcand -o -s8 /dev/eva_right_can can2 &   sleep 0.5;   sudo ifconfig can1 up;   sudo ifconfig can2 up'
-```
-
-Then reload:
-
-```bash
-source ~/.bashrc
-```
-
-`can-both` will reset any existing CAN state, then bring up `can1` (left) and `can2` (right).
-
----
-
-## 2. Docker image build (only when code changes or container doesn't start/attach)
-
-From your EgoVerse repo:
-
-```bash
-cd path/to/your/EgoVerse/repo
-git pull        # or `gt sync`
-docker build -t robot-env:latest .
-```
-
-You only need to do this initially and whenever you pull/modify code.
-
----
-
-## 3. Running the container
-
-From the repo root (or wherever `run_eva_docker.sh` lives):
-
-```bash
-./run_eva_docker.sh {left | right | both}
-```
-
-Once the container appears in Cursor / VS Code, attach a terminal to it and run:
-
-```bash
-cd /home/robot/robot_ws
-wsbuild
-cd ../..
+source emimic/bin/activate
+pip install python-can==4.5.0
+pip install -e external/i2rt --no-deps   # --no-deps skips the numpy==2.2.6 pin (emimic already has 2.4.x)
 ```
 
 ---
 
-## 4. Connect Aria + VR
+## 2. One-time host setup
 
-### 4.1. Aria pairing (inside container)
+### 2.1. Bring up CAN interfaces
 
-With Aria connected to the companion app:
-
-```bash
-aria auth pair
-```
-
-### 4.2. Check VR + Aria from host
-
-On the host machine:
+YAM uses native CAN (not USB-serial). Bring up both interfaces at 1 Mbit/s:
 
 ```bash
-adb start-server
-adb devices
-aria device info
+sudo ip link set can0 up type can bitrate 1000000   # left arm
+sudo ip link set can1 up type can bitrate 1000000   # right arm
 ```
 
----
-
-## 5. Ensure arms are connected
-
-On the host:
+To reset unresponsive adapters, use the script provided by i2rt:
 
 ```bash
-can-both
+sudo sh external/i2rt/scripts/reset_all_can.sh
 ```
 
-This brings up `can1` and `can2` for the left and right arms.
-
----
-
-## 6. Collecting demos
-
-> **Warning (hardware connections, before running `collect_demo.py`):**
-> - Plug the dock into the **THUNDERBOLT (PCIe) port below the GPU**.
-> - Plug the **Aria separately into a USB port** (not through the dock).
-
-Inside the container, from `/home/robot/robot_ws`:
+Check that interfaces are up:
 
 ```bash
-python3 collect_demo.py
-```
-
-Defaults:
-
-- Saves demos to `./demos`
-- Uses the **right** arm by default
-
-### 6.1. Useful arguments
-
-```bash
-python3 collect_demo.py   --auto-episode-start {episode_idx}   --demo-dir /path/to/demo/directory   --arms {right | left | both}   --calibrate
-```
-
-- `--auto-episode-start {episode_idx}`: auto-increments episode index starting at `episode_idx`
-- `--demo-dir`: custom demo output directory
-- `--arms`: choose `right`, `left`, or `both`
-- `--calibrate`: run Quest Pro controller orientation calibration
-
-### 6.2. Quick controls (Quest controller)
-
-- **Y**: reset robot to home
-- **B**: start / stop episode recording
-- **X**: delete current episode buffer
-- **A**: ESTOP
-
-- Left / right triggers: engage robot motion  
-- Left / right front triggers: control gripper
-
----
-
-## 7. Common errors
-
-### 7.1. Resource busy (stale `collect_demo.py`)
-
-If you see a “resource busy” error, inside the container:
-
-```bash
-jobs -l
-kill -9 {pid_of_previous_collect_demo.py}
-```
-
-Then rerun:
-
-```bash
-python3 collect_demo.py
-```
-
-### 7.2. `ModuleNotFoundError: No module named 'arx5'`
-
-Inside the container:
-
-```bash
-source /opt/ros/humble/setup.bash
-```
-
-### 7.3. `CXXABI_1.3.15` / `libstdc++.so.6` error
-
-Example:
-
-```text
-ImportError: /lib/x86_64-linux-gnu/libstdc++.so.6: version `CXXABI_1.3.15' not found
-```
-
-Fix:
-
-```bash
-export LD_LIBRARY_PATH=/root/.local/share/mamba/envs/arx-py310/lib:$LD_LIBRARY_PATH
-```
-
-### 7.4. VR debug mode popup missing (host)
-
-On the host:
-
-```bash
-adb kill-server
-adb start-server
-adb devices
+ip link show | grep can
 ```
 
 ---
 
-## 8. Uploading demos to AWS
+## 3. Operational notes
 
-After you are done collecting data:
+These apply every time you connect to hardware (verified against i2rt source):
+
+- **CAN must be up before instantiation.** The i2rt `MotorChainRobot` constructor blocks waiting for the first motor state message. Run `can-yam` before starting any Python script.
+
+- **Gripper calibration runs on first connect.** `LINEAR_4310` has `needs_calibration=True` — the gripper will sweep to both mechanical stops (~4 s total). Keep the workspace clear.
+
+- **`zero_gravity_mode=True` by default.** After `__init__` the arm floats under gravity compensation. The first `set_joints` / `set_pose` call engages PD control — if the target is far from the current pose the snap can be abrupt. Always call `set_home(current_joints, current_gripper)` first to lock in position before running a policy.
+
+- **Joint limits are enforced at ±0.1 rad buffer.** i2rt raises `RuntimeError` every update cycle if any arm joint is outside its limits. The arm must start in a valid configuration; otherwise the motor chain shuts down immediately.
+
+### Gripper convention
+
+| Direction | `get_joints()[6]` | `set_joints(...)[6]` |
+|-----------|-------------------|----------------------|
+| Closed    | 0.0               | 0.0                  |
+| Open      | 1.0               | 1.0                  |
+
+Normalization is handled internally by i2rt's `JointMapper` remapper — you never need to convert to/from raw motor units.
+
+---
+
+## 4. Hardware smoke test (read-only, no commands sent)
+
+Bring up CAN, then:
 
 ```bash
-python3 eva_uploader.py
+source emimic/bin/activate
+python egomimic/robot/yam/yam_interface.py --channel can1
+```
+
+Expected output:
+
+```
+num_dofs : 7
+joints   : [ ... 6 arm joints in rad ... gripper 0..1 ]
+pose_6d  : [ x  y  z  yaw  pitch  roll ]
+```
+
+The arm stays in gravity-compensation (zero-torque) mode throughout.
+
+---
+
+## 5. Finding the home pose
+
+There is no built-in home pose — it depends on your workspace setup. To find one:
+
+1. With the arm in zero-gravity mode, physically guide it to a neutral pose.
+2. Read the current joints:
+   ```bash
+   python egomimic/robot/yam/yam_interface.py --channel can1
+   ```
+3. Note the printed `joints` array — that is your `arm_joints` (first 6 values) and `gripper` (7th value) for `set_home()`.
+
+Alternatively, use i2rt's MuJoCo viewer to find a pose in simulation:
+
+```bash
+cd external/i2rt
+python examples/control_with_mujoco/main.py
+```
+
+---
+
+## 6. Uploading demos to AWS
+
+```bash
+source emimic/bin/activate
+python egomimic/scripts/data_download/sync_s3.py --local-dir <demo_dir> --filters <filter>
 ```

@@ -162,9 +162,17 @@ class YAMArm:
             time.sleep(time_s)
 
     def close(self) -> None:
-        # DMChainCanInterface.close() sets running=False then immediately closes
-        # the CAN socket, without joining its own thread. Pre-signal the thread
-        # to stop so it has time to exit before the socket fd is invalidated.
+        # MotorChainRobot shutdown
+        # start_server checks motor_chain.running every tick and raises
+        # _stop_event must be set (and the server thread joined) before running
+        # is cleared.
+        # DMChainCanInterface.close() sets running=False then immediately
+        # closes the CAN socket without joining its own control thread.
+        # Pre-signal that thread so it exits before the fd is invalidated.
+        if hasattr(self.robot, "_stop_event"):
+            self.robot._stop_event.set()
+        if hasattr(self.robot, "_server_thread"):
+            self.robot._server_thread.join()
         if hasattr(self.robot, "motor_chain") and hasattr(
             self.robot.motor_chain, "running"
         ):

@@ -127,26 +127,29 @@ def _enter_intervention(kp, policy, rollout_type):
             print(f"Unknown command: '{cmd}'. Use c / a <path> / r / q.")
 
 
-def main(args):
-    arms_list = ["right", "left"] if args.arms == "both" else [args.arms]
-
+def _build_robot_interface(args, arms_list):
     if args.offline_debug:
         print("[run_yam_policy] Offline mode — no hardware will be used.")
-        ri = OfflineYAMInterface(
+        return OfflineYAMInterface(
             arms=arms_list,
             dataset_path=args.offline_episode_path,
         )
-    else:
-        print("[run_yam_policy] Connecting to YAM hardware...")
-        ri = YAMInterface(
-            arms=arms_list,
-            left_channel=args.left_channel,
-            right_channel=args.right_channel,
-            front_cam_serial=args.front_cam_serial or None,
-            left_wrist_serial=args.left_wrist_serial or None,
-            right_wrist_serial=args.right_wrist_serial or None,
-        )
-        print("[run_yam_policy] Hardware connected.")
+    print("[run_yam_policy] Connecting to YAM hardware...")
+    ri = YAMInterface(
+        arms=arms_list,
+        left_channel=args.left_channel,
+        right_channel=args.right_channel,
+        front_cam_serial=args.front_cam_serial or None,
+        left_wrist_serial=args.left_wrist_serial or None,
+        right_wrist_serial=args.right_wrist_serial or None,
+    )
+    print("[run_yam_policy] Hardware connected.")
+    return ri
+
+
+def main(args):
+    arms_list = ["right", "left"] if args.arms == "both" else [args.arms]
+    ri = _build_robot_interface(args, arms_list)
 
     if args.policy_path is not None:
         rollout_type = "policy"
@@ -231,15 +234,15 @@ def main(args):
         ri.close()
 
 
-def parse_args():
+def build_arg_parser(description="Rollout robot model for YAM arm."):
     import argparse
 
-    p = argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         description="Run an EgoVerse policy on real YAM bimanual hardware."
     )
 
     # Arms
-    p.add_argument(
+    parser.add_argument(
         "--arms",
         default="both",
         choices=["left", "right", "both"],
@@ -247,83 +250,88 @@ def parse_args():
     )
 
     # CAN channels
-    p.add_argument(
+    parser.add_argument(
         "--left-channel",
         default="can0",
         help="CAN interface for left arm (default: can0)",
     )
-    p.add_argument(
+    parser.add_argument(
         "--right-channel",
         default="can1",
         help="CAN interface for right arm (default: can1)",
     )
 
     # Camera serials — defaults from Apr-2026 calibration; override if hardware changes
-    p.add_argument(
+    parser.add_argument(
         "--front-cam-serial",
         default="409122272713",
         help="RealSense D405 serial for front/egocam",
     )
-    p.add_argument(
+    parser.add_argument(
         "--left-wrist-serial",
         default="323622272555",
         help="RealSense D405 serial for left wrist",
     )
-    p.add_argument(
+    parser.add_argument(
         "--right-wrist-serial",
         default="352122272502",
         help="RealSense D405 serial for right wrist",
     )
 
     # Policy
-    p.add_argument("--policy-path", type=str, help="Path to trained checkpoint (.ckpt)")
-    p.add_argument("--dataset-path", type=str, help="HDF5 dataset path for replay mode")
-    p.add_argument(
+    parser.add_argument(
+        "--policy-path", type=str, help="Path to trained checkpoint (.ckpt)"
+    )
+    parser.add_argument(
+        "--dataset-path", type=str, help="HDF5 dataset path for replay mode"
+    )
+    parser.add_argument(
         "--offline-debug",
         action="store_true",
         help="Run without hardware using a recorded zarr episode as fake observations",
     )
-    p.add_argument(
+    parser.add_argument(
         "--offline-episode-path",
         type=str,
         help="Path to a zarr episode directory used as obs source in --offline-debug mode",
     )
-    p.add_argument(
+    parser.add_argument(
         "--extrinsics-key",
         default="yamApr2026",
         help="CameraTransforms extrinsics key (default: yamApr2026, from Apr-2026 calibration)",
     )
-    p.add_argument(
+    parser.add_argument(
         "--annotation-path",
         type=str,
         help="Optional: path to a text file with a language annotation for the policy",
     )
 
     # Control
-    p.add_argument(
+    parser.add_argument(
         "--frequency", type=float, default=DEFAULT_FREQUENCY, help="Control loop Hz"
     )
-    p.add_argument(
+    parser.add_argument(
         "--query-frequency",
         type=int,
         default=QUERY_FREQUENCY,
         help="Steps between policy inference calls",
     )
-    p.add_argument(
+    parser.add_argument(
         "--cartesian",
         action="store_true",
         help="Execute actions in Cartesian space (set_pose). Default: joint space (set_joints).",
     )
-    p.add_argument(
+    parser.add_argument(
         "--resampled-action-len",
         type=int,
         default=DEFAULT_RESAMPLE_LENGTH,
         help="Resample each predicted action chunk to this length",
     )
 
-    return p.parse_args()
+    return parser
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    parser = build_arg_parser()
+    args = parser.parse_args()
     main(args)

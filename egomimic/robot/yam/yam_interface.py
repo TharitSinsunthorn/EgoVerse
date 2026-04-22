@@ -162,6 +162,14 @@ class YAMArm:
             time.sleep(time_s)
 
     def close(self) -> None:
+        # DMChainCanInterface.close() sets running=False then immediately closes
+        # the CAN socket, without joining its own thread. Pre-signal the thread
+        # to stop so it has time to exit before the socket fd is invalidated.
+        if hasattr(self.robot, "motor_chain") and hasattr(
+            self.robot.motor_chain, "running"
+        ):
+            self.robot.motor_chain.running = False
+            time.sleep(0.05)
         self.robot.close()
 
     def __enter__(self):
@@ -202,5 +210,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print()
     finally:
-        time.sleep(0.2)  # let control thread finish before closing CAN socket
         arm.close()

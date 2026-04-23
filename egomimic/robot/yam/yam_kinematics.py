@@ -6,6 +6,7 @@ import os
 from typing import Optional
 
 import numpy as np
+from mink.exceptions import NoSolutionFound
 
 from egomimic.robot.kinematics import MinkKinematicsSolver, TracKinematicsSolver
 
@@ -149,8 +150,14 @@ class YAMMinkKinematicsSolver(MinkKinematicsSolver):
 
     def ik_with_retries(self, pos_xyz, rot_mat, cur_jnts, num_retries=3, dt=0.01):
         """Solve IK and verify via FK; retry with random seeds on failure."""
-        result = self.ik(pos_xyz, rot_mat, cur_jnts, dt=dt)
 
+        def _try_ik(seed):
+            try:
+                return self.ik(pos_xyz, rot_mat, seed, dt=dt)
+            except NoSolutionFound:
+                return None
+
+        result = _try_ik(cur_jnts)
         if result is not None:
             fk_pos, fk_rot = self.fk(result)
             pos_error = np.linalg.norm(fk_pos - pos_xyz)
@@ -163,7 +170,7 @@ class YAMMinkKinematicsSolver(MinkKinematicsSolver):
 
         for _ in range(num_retries):
             perturbed = cur_jnts + np.random.randn(self.num_joints) * 0.1
-            result = self.ik(pos_xyz, rot_mat, perturbed, dt=dt)
+            result = _try_ik(perturbed)
             if result is not None:
                 fk_pos, fk_rot = self.fk(result)
                 pos_error = np.linalg.norm(fk_pos - pos_xyz)

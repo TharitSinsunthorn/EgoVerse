@@ -1,0 +1,27 @@
+{
+  "task_name": "placeRedCube",
+  "task_instruction": "place the red cube on the board.",
+  "timestamp": "2026-04-09T18:56:14.737430",
+  "duration_s": 19.577,
+  "robot_frames": 1814,
+  "robot_hz": 92.7,
+  "cameras": [
+    "scene_camera",
+    "left_wrist_camera",
+    "right_wrist_camera"
+  ],
+  "camera_fps": 30,
+  "control": "leader",
+  "complete": true,
+  "converted": true,
+  "camera_start_times_ns": {
+    "scene_camera": 1775732149178432427,
+    "left_wrist_camera": 1775732149179104876,
+    "right_wrist_camera": 1775732149179304598
+  },
+  "realsense_clock_offsets": {
+    "scene_camera": 3934476,
+    "left_wrist_camera": 1319052,
+    "right_wrist_camera": -1900375
+  }
+}

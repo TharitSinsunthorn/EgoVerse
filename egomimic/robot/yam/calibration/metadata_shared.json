@@ -1,0 +1,52 @@
+{
+  "info": {
+    "name": "placeRedCube",
+    "raw_id": "2026-04-09T18:56:14.737430",
+    "tags": [
+      "robotics"
+    ]
+  },
+  "labels": [
+    "rgb",
+    "depth",
+    "action",
+    "language"
+  ],
+  "cameras": [
+    "left_wrist_camera",
+    "right_wrist_camera",
+    "scene_camera"
+  ],
+  "resolution": [
+    480,
+    640
+  ],
+  "framerate": 30,
+  "language": {
+    "task": "placeRedCube",
+    "prompt": [
+      "place the red cube on the board."
+    ]
+  },
+  "num_frames": 671,
+  "rgb": {
+    "extension": "jpg"
+  },
+  "depth": {
+    "extension": "npz",
+    "sparse": false,
+    "metric": true
+  },
+  "intrinsics": {
+    "model": "pinhole"
+  },
+  "extrinsics": {
+    "transform": "cam2world",
+    "metric": true
+  },
+  "action": {
+    "format": "joint_cmd",
+    "dims": 14
+  },
+  "control": "leader"
+}

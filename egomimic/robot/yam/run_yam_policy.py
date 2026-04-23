@@ -149,6 +149,18 @@ def _build_robot_interface(args, arms_list):
 
 def main(args):
     arms_list = ["right", "left"] if args.arms == "both" else [args.arms]
+
+    if args.offline_episode_path is not None and not args.offline_debug:
+        raise ValueError("--offline-episode-path requires --offline-debug.")
+    if (
+        args.policy_path is not None
+        and args.offline_debug
+        and args.offline_episode_path is None
+    ):
+        raise ValueError(
+            "--policy-path requires --offline-episode-path in --offline-debug mode."
+        )
+
     ri = _build_robot_interface(args, arms_list)
 
     if args.policy_path is not None:
@@ -208,7 +220,7 @@ def main(args):
                             actions = policy.rollout_step(step_i)
 
                         if actions is None:
-                            print("Rollout finished.")
+                            print("Fininh rollout.")
                             reset_rollout(ri, policy)
                             result = _enter_intervention(kp, policy, rollout_type)
                             if result == "quit":
@@ -228,37 +240,37 @@ def main(args):
                                 ri.set_joints(arm_action, arm)
 
     except KeyboardInterrupt:
-        print("\n[run_yam_policy] Interrupted.")
+        print("KeyboardInterrupt detected, exiting rollout.")
     finally:
         print("[run_yam_policy] Closing hardware connections...")
         ri.close()
 
 
-def build_arg_parser(description="Rollout robot model for YAM arm."):
+def build_arg_parser(
+    description="Run an EgoVerse policy on real YAM bimanual hardware.",
+):
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Run an EgoVerse policy on real YAM bimanual hardware."
-    )
+    parser = argparse.ArgumentParser(description=description)
 
     # Arms
     parser.add_argument(
         "--arms",
         default="both",
         choices=["left", "right", "both"],
-        help="Which arm(s) to control (default: both)",
+        help="Which arm(s) to control",
     )
 
     # CAN channels
     parser.add_argument(
         "--left-channel",
         default="can0",
-        help="CAN interface for left arm (default: can0)",
+        help="CAN interface for left arm",
     )
     parser.add_argument(
         "--right-channel",
         default="can1",
-        help="CAN interface for right arm (default: can1)",
+        help="CAN interface for right arm",
     )
 
     # Camera serials — defaults from Apr-2026 calibration; override if hardware changes
@@ -278,34 +290,6 @@ def build_arg_parser(description="Rollout robot model for YAM arm."):
         help="RealSense D405 serial for right wrist",
     )
 
-    # Policy
-    parser.add_argument(
-        "--policy-path", type=str, help="Path to trained checkpoint (.ckpt)"
-    )
-    parser.add_argument(
-        "--dataset-path", type=str, help="HDF5 dataset path for replay mode"
-    )
-    parser.add_argument(
-        "--offline-debug",
-        action="store_true",
-        help="Run without hardware using a recorded zarr episode as fake observations",
-    )
-    parser.add_argument(
-        "--offline-episode-path",
-        type=str,
-        help="Path to a zarr episode directory used as obs source in --offline-debug mode",
-    )
-    parser.add_argument(
-        "--extrinsics-key",
-        default="yamApr2026",
-        help="CameraTransforms extrinsics key (default: yamApr2026, from Apr-2026 calibration)",
-    )
-    parser.add_argument(
-        "--annotation-path",
-        type=str,
-        help="Optional: path to a text file with a language annotation for the policy",
-    )
-
     # Control
     parser.add_argument(
         "--frequency", type=float, default=DEFAULT_FREQUENCY, help="Control loop Hz"
@@ -319,13 +303,51 @@ def build_arg_parser(description="Rollout robot model for YAM arm."):
     parser.add_argument(
         "--cartesian",
         action="store_true",
-        help="Execute actions in Cartesian space (set_pose). Default: joint space (set_joints).",
+        help="Control in cartesian space instead of joint space).",
     )
     parser.add_argument(
         "--resampled-action-len",
         type=int,
         default=DEFAULT_RESAMPLE_LENGTH,
-        help="Resample each predicted action chunk to this length",
+        help="Resample each predicted action chunk to this length (e.g., 100 -> 45). Euler if --cartesian",
+    )
+
+    # Policy
+    parser.add_argument("--policy-path", type=str, help="Policy checkpoint path")
+    parser.add_argument("--dataset-path", type=str, help="Dataset path for replay")
+    parser.add_argument(
+        "--offline-debug",
+        action="store_true",
+        help="Use the offline dummy robot inference for rollout debugging",
+    )
+    parser.add_argument(
+        "--offline-episode-path",
+        type=str,
+        help="Local EVA Zarr episode path used as observation source in offline debug mode",
+    )
+    parser.add_argument(
+        "--extrinsics-key",
+        default="yamApr2026",
+        help="CameraTransforms extrinsics key (default: yamApr2026, from Apr-2026 calibration)",
+    )
+    parser.add_argument(
+        "--annotation-path",
+        type=str,
+        help="Path to the annotation file",
+    )
+
+    # Visualization
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug visualization of actions on images",
+    )
+    parser.add_argument(
+        "--save-video",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Save the visualization frames to an MP4 file (requires --visualize)",
     )
 
     return parser

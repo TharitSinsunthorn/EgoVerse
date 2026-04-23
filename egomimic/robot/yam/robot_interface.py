@@ -87,15 +87,8 @@ class YAMInterface:
         self.arms = arms
         channels = {"left": left_channel, "right": right_channel}
 
-        self._arms: dict = {
-            arm: YAMArm(
-                channel=channels[arm],
-                arm_type=arm_type,
-                gripper_type=gripper_type,
-            )
-            for arm in arms
-        }
-
+        # Cameras before arms: RealSense USB enumeration holds the GIL for seconds,
+        # which would starve the 250 Hz motor control threads and trip DM watchdogs.
         cam_specs = {"front_img_1": front_cam_serial}
         if "left" in arms:
             cam_specs["left_wrist_img"] = left_wrist_serial
@@ -106,6 +99,15 @@ class YAMInterface:
             key: RealSenseRecorder(serial)
             for key, serial in cam_specs.items()
             if serial is not None
+        }
+
+        self._arms: dict = {
+            arm: YAMArm(
+                channel=channels[arm],
+                arm_type=arm_type,
+                gripper_type=gripper_type,
+            )
+            for arm in arms
         }
 
     # ----- observations -----

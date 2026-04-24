@@ -44,19 +44,26 @@ def get_yam_combined_xml(
 
 
 class YAMTracKinematicsSolver(TracKinematicsSolver):
-    """TracIK solver for YAM. Uses the URDF; EEF defaults to link_6 (last
+    """
+    TracIK solver for YAM. Uses the URDF; EEF defaults to link_6 (last
     actuated link). Switch eef_link_name to a gripper link if a URDF for the
-    gripper is merged in."""
+    gripper is merged in.
+    """
 
     def __init__(
         self,
         urdf_path: str = YAM_URDF_PATH,
-        eef_link_name: str = "link_6",
     ):
+        """
+        Inintialize YAM TracIK solver.
+
+        Args:
+            urdf_path: Path to YAM's URDF file.
+        """
         super().__init__(
             urdf_path=urdf_path,
             base_link_name="base_link",
-            eef_link_name=eef_link_name,
+            eef_link_name="link_6",
             num_joints=6,
         )
         self.urdf_path = urdf_path
@@ -64,12 +71,14 @@ class YAMTracKinematicsSolver(TracKinematicsSolver):
 
 
 class YAMMinkKinematicsSolver(MinkKinematicsSolver):
-    """Mink (MuJoCo-based) IK solver for YAM.
+    """
+    Yam-specific kinematics solver using Mink.
 
     Uses the combined arm+gripper XML so the EEF frame is the gripper TCP
     site, which is what the policy's Cartesian actions are expressed in.
     """
 
+    # Joint names for YAM arm
     JOINT_NAMES = [
         "joint1",
         "joint2",
@@ -79,7 +88,7 @@ class YAMMinkKinematicsSolver(MinkKinematicsSolver):
         "joint6",
     ]
 
-    # Conservative per-joint velocity limits (rad/s). Tune from motor specs.
+    # Conservative velocity limits (rad/s).
     DEFAULT_VELOCITY_LIMITS = {
         "joint1": 1.0,
         "joint2": 1.0,
@@ -145,11 +154,30 @@ class YAMMinkKinematicsSolver(MinkKinematicsSolver):
         self.base_transform = None
 
     def set_base_transform(self, transform):
-        """Set a base-to-world transform for mobile-base deployments."""
+        """
+        Set a base-to-world transform for mobile-base deployments.
+
+         Args:
+            transform: 4x4 homogeneous transform from the robot's base frame to the world frame.
+        """
         self.base_transform = transform
 
-    def ik_with_retries(self, pos_xyz, rot_mat, cur_jnts, num_retries=3, dt=0.01):
-        """Solve IK and verify via FK; retry with random seeds on failure."""
+    def ik_with_retries(self, pos_xyz, rot_mat, cur_jnts, num_retries=3, dt=0.1):
+        """
+        Solve IK with multiple retries and different random seeds on failure.
+
+        Args:
+            pos_xyz: Desired end-effector position (3,).
+            rot_mat: Desired end-effector rotation as a 3x3 matrix.
+            cur_jnts: Current joint values (6,).
+            num_retries: Number of retries with random perturbations if IK fails.
+            dt: Per-iteration integration step for Mink. Larger values allow
+                more joint travel per call, which can help recover from large
+                target jumps at the cost of potentially less precision.
+
+        Returns:
+            solved_jnts: Solution joint valuse or None if all retries fail.
+        """
 
         def _try_ik(seed):
             try:
@@ -157,28 +185,38 @@ class YAMMinkKinematicsSolver(MinkKinematicsSolver):
             except NoSolutionFound:
                 return None
 
+        # Loose acceptance: position within 3 cm, rotation-matrix Frobenius
+        # error within 0.3 (~12°). Tight tolerances reject near-miss solutions
+        # that are still useful for tracking a policy target.
+        pos_thresh = 0.03
+        rot_thresh = 0.3
+
+        # First try with current configuration
         result = _try_ik(cur_jnts)
+
+        # Verify the solution
         if result is not None:
+            # Check if solution is valid by computing FK
             fk_pos, fk_rot = self.fk(result)
             pos_error = np.linalg.norm(fk_pos - pos_xyz)
             rot_error = np.linalg.norm(fk_rot.as_matrix() - rot_mat)
-            if (
-                pos_error < self.position_tolerance * 10
-                and rot_error < self.orientation_tolerance * 10
-            ):
+
+            if pos_error < pos_thresh and rot_error < rot_thresh:
                 return result
 
+        # Try with random perturbations
         for _ in range(num_retries):
+            # Add small random perturbation to seed
             perturbed = cur_jnts + np.random.randn(self.num_joints) * 0.1
             result = _try_ik(perturbed)
+
             if result is not None:
                 fk_pos, fk_rot = self.fk(result)
                 pos_error = np.linalg.norm(fk_pos - pos_xyz)
                 rot_error = np.linalg.norm(fk_rot.as_matrix() - rot_mat)
-                if (
-                    pos_error < self.position_tolerance * 10
-                    and rot_error < self.orientation_tolerance * 10
-                ):
+
+                if pos_error < pos_thresh and rot_error < rot_thresh:
                     return result
 
+        # All retries failed
         return None

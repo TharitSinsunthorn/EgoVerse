@@ -32,6 +32,9 @@ class EMBODIMENT(Enum):
     SCALE_BIMANUAL = 12
     SCALE_RIGHT_ARM = 13
     SCALE_LEFT_ARM = 14
+    YAM_BIMANUAL = 15
+    YAM_LEFT_ARM = 16
+    YAM_RIGHT_ARM = 17
 
 
 EMBODIMENT_ID_TO_KEY = {member.value: member.name for member in EMBODIMENT}
@@ -46,6 +49,7 @@ _EMBODIMENT_ALIASES = {
     "EVA": "EVA_BIMANUAL",
     "ARIA": "ARIA_BIMANUAL",
     "MECKA": "MECKA_BIMANUAL",
+    "YAM": "YAM_BIMANUAL",
 }
 
 

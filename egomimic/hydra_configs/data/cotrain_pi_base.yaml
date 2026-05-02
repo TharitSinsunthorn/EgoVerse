@@ -65,9 +65,27 @@ valid_datasets:
 
 use_tokenizer: true
 model_name: "google/paligemma-3b-mix-224"
-sampling_mode: "random"
+sampling_mode: "first"
 annotation_key: null
 default_prompt: ""
+
+# pi0.5-style proprio-in-prompt. When `discrete_state_input: true`, the
+# union of `proprio_keys` is concatenated, clipped to [-1, 1], discretized
+# into `state_num_bins` bins, and spliced into the prompt as
+# "Task: {prompt}, State: <b0> <b1> ...;\nAction: " before tokenization.
+# Keys missing from a given embodiment's batch are silently skipped, so the
+# list below is the union across the cartesian eva + aria embodiments used
+# by this base. State is assumed normalized to [-1, 1] upstream — values
+# outside that range are clipped, so confirm norm_stats is populated for
+# these keys before training.
+discrete_state_input: true
+proprio_keys:
+  - right.obs_ee_pose
+  - right.obs_gripper
+  - left.obs_ee_pose
+  - left.obs_gripper
+  - obs_head_pose
+state_num_bins: 256
 
 train_dataloader_params:
   eva_bimanual:

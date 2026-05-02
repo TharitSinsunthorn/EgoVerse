@@ -2,6 +2,8 @@ import logging
 import random
 from typing import Literal
 
+import numpy as np
+import torch
 from lightning import LightningDataModule
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
 from termcolor import cprint
@@ -64,6 +66,9 @@ class MultiDataModuleWrapper(LightningDataModule):
         annotation_key=None,
         use_tokenizer=False,
         default_prompt="",
+        proprio_keys: list[str] | None = None,
+        discrete_state_input: bool = False,
+        state_num_bins: int = 256,
     ):
         """
         Args:
@@ -77,6 +82,12 @@ class MultiDataModuleWrapper(LightningDataModule):
             use_tokenizer: whether to use the tokenizer to tokenize the prompts
             default_prompt: default prompt to use if the annotation key is not found
             collate_max_length: maximum length of the tokenized prompts
+            proprio_keys: union of per-sample state keys to concat for the
+                ``discrete_state_input`` path. Keys missing from a given
+                embodiment's batch are skipped.
+            discrete_state_input: if True, splice discretized proprio into the
+                prompt as ``Task: ..., State: <bins>;\\nAction: `` (pi0.5 style).
+            state_num_bins: number of bins to discretize each state dim into.
         """
         super().__init__()
         self.train_datasets = train_datasets
@@ -90,6 +101,9 @@ class MultiDataModuleWrapper(LightningDataModule):
                 sampling_mode=sampling_mode,
                 annotation_key=annotation_key,
                 default_prompt=default_prompt,
+                proprio_keys=proprio_keys,
+                discrete_state_input=discrete_state_input,
+                state_num_bins=state_num_bins,
             )
         else:
             self.collate_fn = annotation_collate
@@ -284,10 +298,48 @@ def build_tokenized_collate(
     sampling_mode: Literal["first", "random"] = "random",
     annotation_key="annotations",
     default_prompt="",
+    proprio_keys: list[str] | None = None,
+    discrete_state_input: bool = False,
+    state_num_bins: int = 256,
 ):
-    """Return a collate_fn closure that tokenizes the annotations field."""
+    """Return a collate_fn closure that tokenizes the annotations field.
+
+    If ``discrete_state_input=True``, the per-sample proprio listed in
+    ``proprio_keys`` is concatenated, clipped to ``[-1, 1]``, discretized into
+    ``state_num_bins`` bins, and spliced into the prompt as
+    ``"Task: {prompt}, State: {b0} {b1} ...;\\nAction: "`` before tokenization
+    (mirrors openpi's pi05 PaligemmaTokenizer convention). State is assumed to
+    already be normalized to ``[-1, 1]`` upstream; values outside that range
+    are clipped.
+    """
 
     tok = AutoTokenizer.from_pretrained(model_name)
+    state_bin_edges = np.linspace(-1.0, 1.0, state_num_bins + 1)[:-1]
+    proprio_keys = list(proprio_keys) if proprio_keys else []
+
+    def _discretize_sample_state(sample):
+        if not proprio_keys:
+            return None
+        parts = []
+        for k in proprio_keys:
+            if k not in sample:
+                continue
+            v = sample[k]
+            if isinstance(v, torch.Tensor):
+                v = v.detach().cpu().numpy()
+            else:
+                v = np.asarray(v)
+            v = np.asarray(v, dtype=np.float32)
+            # Use the most recent timestep if proprio carries a time axis.
+            while v.ndim > 1:
+                v = v[-1]
+            parts.append(v.reshape(-1))
+        if not parts:
+            return None
+        state = np.concatenate(parts, axis=-1)
+        state = np.clip(state, -1.0, 1.0)
+        bins = np.digitize(state, bins=state_bin_edges) - 1
+        return " ".join(map(str, bins.tolist()))
 
     def _collate(batch):
         if annotation_key is None:
@@ -306,6 +358,16 @@ def build_tokenized_collate(
                 elif sampling_mode == "first":
                     sampled_prompt = sample[0]
                 prompts.append(sampled_prompt)
+
+        if discrete_state_input:
+            spliced = []
+            for i, prompt in enumerate(prompts):
+                state_str = _discretize_sample_state(batch[i])
+                if state_str is None:
+                    spliced.append(prompt)
+                else:
+                    spliced.append(f"Task: {prompt}, State: {state_str};\nAction: ")
+            prompts = spliced
 
         list_keys = _extract_list_keys(batch)
 

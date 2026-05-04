@@ -27,7 +27,7 @@ import random
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 import numpy as np
 import pandas as pd
@@ -39,12 +39,18 @@ from egomimic.rldb.embodiment.embodiment import get_embodiment_id
 
 # from action_chunk_transforms import Transform
 from egomimic.rldb.filters import DatasetFilter
-from egomimic.rldb.zarr.zarr_dataset_action_expert import ZarrActionExpertDataset
 from egomimic.utils.aws.aws_data_utils import load_env
 from egomimic.utils.aws.aws_sql import (
     create_default_engine,
     episode_table_to_df,
 )
+
+if TYPE_CHECKING:
+    # Annotation-only import — avoids a runtime circular import with
+    # zarr_dataset_action_expert (which itself imports MultiDataset from here).
+    from egomimic.rldb.zarr.zarr_dataset_action_expert import (
+        ZarrActionExpertDataset,
+    )
 
 logger = logging.getLogger(__name__)
 

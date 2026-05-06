@@ -34,3 +34,7 @@ model_name: "google/paligemma-3b-mix-224"
 sampling_mode: "random"
 annotation_key: "annotations"
 default_prompt: "this is a bad action"
+
+control_mode:
+  aria: "cam frame xyzypr per arm"
+  eva: "cam frame xyzypr gripper per arm"

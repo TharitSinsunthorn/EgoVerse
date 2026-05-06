@@ -67,9 +67,10 @@ class MultiDataModuleWrapper(LightningDataModule):
         use_tokenizer=False,
         default_prompt="",
         proprio_keys: list[str] | None = None,
-        discrete_state_input: bool = False,
         state_num_bins: int = 256,
-        proprio_mode: Literal["original", "specific", "language"] = "original",
+        proprio: bool = False,
+        embodiment_label: bool = False,
+        control_mode: dict[str, str] | None = None,
     ):
         """
         Args:
@@ -84,17 +85,28 @@ class MultiDataModuleWrapper(LightningDataModule):
             default_prompt: default prompt to use if the annotation key is not found
             collate_max_length: maximum length of the tokenized prompts
             proprio_keys: union of per-sample state keys to concat for the
-                ``discrete_state_input`` path. Keys missing from a given
-                embodiment's batch are skipped.
-            discrete_state_input: if True, splice discretized proprio into the
-                prompt as ``Task: ..., State: <bins>;\\nAction: `` (pi0.5 style).
+                ``proprio`` path. Keys missing from a given embodiment's
+                batch are skipped.
             state_num_bins: number of bins to discretize each state dim into.
-            proprio_mode: "original" for the upstream pi0.5 template
-                (``Task: ..., State: ...``), "specific" to additionally splice
-                ``Embodiment:`` and ``Control mode:`` descriptors into the
-                prompt, or "language" to tokenize only the raw prompt with no
-                ``State:`` block (pre-pi0.5 behaviour; takes precedence over
-                ``discrete_state_input``).
+            proprio: if True, splice discretized proprio into the prompt as
+                ``..., State: <bins>``. State is clipped to ``[-1, 1]`` and
+                discretized with ``state_num_bins`` (pi0.5 style; assumes
+                upstream normalization).
+            embodiment_label: if True, splice ``..., Embodiment: <name>``
+                into the prompt.
+            control_mode: optional per-embodiment dict; when non-null,
+                splices ``..., Control mode: <descriptor>``. Keys are
+                substrings matched against the (lowercased, ``_``→space)
+                embodiment name; first match wins. Falls back to the
+                built-in ``cam frame xyzypr [gripper] per arm`` strings if
+                no key matches. Example for wristframe pipelines:
+                ``{aria: "wrist frame xyzypr per arm",
+                  eva:  "wrist frame xyzypr gripper per arm"}``.
+
+            If any of ``proprio``, ``embodiment_label``, or ``control_mode``
+            is active, the prompt is rendered as
+            ``"Task: {prompt}, <blocks>;\\nAction: "`` (pi0.5 anchor).
+            Otherwise the raw ``prompt`` is tokenized as-is.
         """
         super().__init__()
         # Drop `None` slots so downstream iteration sites don't need null guards.
@@ -112,9 +124,10 @@ class MultiDataModuleWrapper(LightningDataModule):
                 annotation_key=annotation_key,
                 default_prompt=default_prompt,
                 proprio_keys=proprio_keys,
-                discrete_state_input=discrete_state_input,
                 state_num_bins=state_num_bins,
-                proprio_mode=proprio_mode,
+                proprio=proprio,
+                embodiment_label=embodiment_label,
+                control_mode=control_mode,
             )
         else:
             self.collate_fn = annotation_collate
@@ -312,38 +325,30 @@ def build_tokenized_collate(
     annotation_key="annotations",
     default_prompt="",
     proprio_keys: list[str] | None = None,
-    discrete_state_input: bool = False,
     state_num_bins: int = 256,
-    proprio_mode: Literal["original", "specific", "language"] = "original",
+    proprio: bool = False,
+    embodiment_label: bool = False,
+    control_mode: dict[str, str] | None = None,
 ):
     """Return a collate_fn closure that tokenizes the annotations field.
 
-    If ``discrete_state_input=True``, the per-sample proprio listed in
-    ``proprio_keys`` is concatenated, clipped to ``[-1, 1]``, discretized into
-    ``state_num_bins`` bins, and spliced into the prompt before tokenization
-    (mirrors openpi's pi05 PaligemmaTokenizer convention). State is assumed to
-    already be normalized to ``[-1, 1]`` upstream; values outside that range
-    are clipped.
+    Three orthogonal inclusion flags govern what gets spliced into the prompt:
 
-    The text template depends on ``proprio_mode``:
-      - ``"original"`` (default, openpi-compatible):
-          ``"Task: {prompt}, State: {b0} {b1} ...;\\nAction: "``
-      - ``"specific"`` (adds embodiment + control-mode descriptors):
-          ``"Task: {prompt}, Embodiment: {emb}, Control mode: {mode}, State: {b0} {b1} ...;\\nAction: "``
-        where the control-mode descriptor is
-        ``"cam frame xyzypr gripper per arm"`` for robot embodiments and
-        ``"cam frame xyzypr per arm"`` for Aria (no gripper).
-      - ``"language"`` (no proprio in prompt; matches the pre-pi0.5 behaviour):
-          the raw ``prompt`` is tokenized as-is, with no ``State:`` block and
-          no ``Action:`` anchor. Useful for ablations or pi0-style models that
-          take state through ``state_proj`` instead of the language stream.
-          Effective regardless of ``discrete_state_input``.
+      - ``proprio`` (bool): if True, append ``State: <bins>``. The per-sample
+        proprio listed in ``proprio_keys`` is concatenated, clipped to
+        ``[-1, 1]``, and discretized into ``state_num_bins`` bins (pi0.5 style;
+        assumes upstream normalization).
+      - ``embodiment_label`` (bool): if True, append ``Embodiment: <name>``.
+      - ``control_mode`` (dict | None): if non-null, append ``Control mode:
+        <descriptor>``. Keys are substrings matched against the (lowercased,
+        ``_``→space) embodiment name; first match wins. Falls back to the
+        built-in ``cam frame xyzypr [gripper] per arm`` defaults if no key
+        matches.
+
+    If any flag is active, the prompt is rendered as
+    ``"Task: {prompt}, <blocks-in-order>;\\nAction: "`` (pi0.5 anchor).
+    Otherwise the raw ``prompt`` is tokenized as-is.
     """
-    if proprio_mode not in ("original", "specific", "language"):
-        raise ValueError(
-            "proprio_mode must be 'original', 'specific', or 'language', "
-            f"got {proprio_mode!r}"
-        )
     from egomimic.rldb.embodiment.embodiment import get_embodiment
 
     tok = AutoTokenizer.from_pretrained(model_name)
@@ -371,6 +376,10 @@ def build_tokenized_collate(
         return name.lower().replace("_", " ")
 
     def _control_mode_for(emb_name):
+        if control_mode and emb_name is not None:
+            for key, val in control_mode.items():
+                if key.lower() in emb_name:
+                    return val
         if emb_name is not None and "aria" in emb_name:
             return "cam frame xyzypr per arm"
         return "cam frame xyzypr gripper per arm"
@@ -417,23 +426,25 @@ def build_tokenized_collate(
                     sampled_prompt = sample[0]
                 prompts.append(sampled_prompt)
 
-        if discrete_state_input and proprio_mode != "language":
+        any_block_active = proprio or embodiment_label or bool(control_mode)
+        if any_block_active:
             spliced = []
             for i, prompt in enumerate(prompts):
-                state_str = _discretize_sample_state(batch[i])
-                if state_str is None:
-                    spliced.append(prompt)
-                    continue
-                if proprio_mode == "original":
-                    spliced.append(f"Task: {prompt}, State: {state_str};\nAction: ")
-                else:  # "specific"
-                    emb_name = _embodiment_name(batch[i])
-                    control_mode = _control_mode_for(emb_name)
-                    emb_part = f", Embodiment: {emb_name}" if emb_name else ""
-                    spliced.append(
-                        f"Task: {prompt}{emb_part}, Control mode: {control_mode}, "
-                        f"State: {state_str};\nAction: "
-                    )
+                emb_name = (
+                    _embodiment_name(batch[i])
+                    if (embodiment_label or control_mode)
+                    else None
+                )
+                blocks = [f"Task: {prompt}"]
+                if embodiment_label and emb_name:
+                    blocks.append(f"Embodiment: {emb_name}")
+                if control_mode:
+                    blocks.append(f"Control mode: {_control_mode_for(emb_name)}")
+                if proprio:
+                    state_str = _discretize_sample_state(batch[i])
+                    if state_str is not None:
+                        blocks.append(f"State: {state_str}")
+                spliced.append(", ".join(blocks) + ";\nAction: ")
             prompts = spliced
 
         list_keys = _extract_list_keys(batch)

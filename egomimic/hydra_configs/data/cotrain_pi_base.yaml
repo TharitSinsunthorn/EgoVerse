@@ -3,8 +3,8 @@ train_datasets:
   eva_bimanual:
     _target_: egomimic.rldb.zarr.zarr_dataset_multi.MultiDataset._from_resolver
     resolver:
-      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3AnnotationCutoffEpisodeResolver
-      folder_path: /storage/project/r-dxu345-0/paphiwetsa3/datasets/pick_place_diverse
+      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3EpisodeResolver
+      folder_path: /storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets
       key_map:
         _target_: egomimic.rldb.embodiment.eva.Eva.get_keymap
         keymap_mode: cartesian
@@ -18,8 +18,8 @@ train_datasets:
   aria_bimanual:
     _target_: egomimic.rldb.zarr.zarr_dataset_multi.MultiDataset._from_resolver
     resolver:
-      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3AnnotationCutoffEpisodeResolver
-      folder_path: /storage/project/r-dxu345-0/paphiwetsa3/datasets/pick_place_diverse
+      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3EpisodeResolver
+      folder_path: /storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets
       key_map:
         _target_: egomimic.rldb.embodiment.human.Aria.get_keymap
         keymap_mode: cartesian
@@ -35,8 +35,8 @@ valid_datasets:
   eva_bimanual:
     _target_: egomimic.rldb.zarr.zarr_dataset_multi.MultiDataset._from_resolver
     resolver:
-      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3AnnotationCutoffEpisodeResolver
-      folder_path: /storage/project/r-dxu345-0/paphiwetsa3/datasets/pick_place_diverse
+      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3EpisodeResolver
+      folder_path: /storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets
       key_map:
         _target_: egomimic.rldb.embodiment.eva.Eva.get_keymap
         keymap_mode: cartesian
@@ -50,8 +50,8 @@ valid_datasets:
   aria_bimanual:
     _target_: egomimic.rldb.zarr.zarr_dataset_multi.MultiDataset._from_resolver
     resolver:
-      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3AnnotationCutoffEpisodeResolver
-      folder_path: /storage/project/r-dxu345-0/paphiwetsa3/datasets/pick_place_diverse
+      _target_: egomimic.rldb.zarr.zarr_dataset_multi.S3EpisodeResolver
+      folder_path: /storage/project/r-dxu345-0/shared/egoverseS3ZarrDatasets
       key_map:
         _target_: egomimic.rldb.embodiment.human.Aria.get_keymap
         keymap_mode: cartesian
